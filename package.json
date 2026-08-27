@@ -1,0 +1,15 @@
+{
+  "name": "aegis-os",
+  "version": "1.0.0",
+  "description": "Aegis OS Preclassic — hosted build with a real filesystem, real settings storage, and a real server-side proxy.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.22.2"
+  }
+}

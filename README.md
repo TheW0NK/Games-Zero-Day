@@ -1,2 +1,65 @@
-# JS-Telephone-Denial-Of-Service
-A T-Dos attack tool used against scammers.
+# Aegis OS — hosted build
+
+The same OS demo, now running with a real backend instead of browser-storage
+workarounds.
+
+## Run it in a Codespace
+
+1. Push this folder to a GitHub repo (or open it directly if it's already one).
+2. Open it in a Codespace. The devcontainer runs `npm install` for you and
+   starts the server automatically; Codespaces will forward port 3000 and
+   offer to open it in your browser.
+3. If it doesn't start on its own: `npm start`, then open the forwarded port.
+
+## Run it anywhere else
+
+```
+npm install
+npm start
+```
+
+Then open http://localhost:3000
+
+## What's actually real now (vs. the browser-only version)
+
+- **User accounts** are stored under `./data/users.json`. The initial
+  superuser is `aledeaux` with password `passwood`; only superusers can add,
+  modify, or remove accounts. Sign in from the Aegis lock screen.
+- **Files app / Terminal** read and write actual files under
+  `./userfiles/<username>/` on this machine. Each account has its own home;
+  delete something in Files, it's gone from disk. Create a file in Terminal,
+  it shows up in Files. Restart the server, it's still there.
+- **System Wipe** requires a superuser credential set, then resets every
+  `./userfiles/<username>/` home and regenerates the starter tree. User
+  accounts are retained so an administrator can sign back in.
+- **Browser app**'s "Full Page" mode routes through `/proxy`, a plain Express
+  route on this same server — it fetches the target page itself, strips the
+  headers that block iframe embedding, and serves the result back
+  same-origin. No third-party service, no shared rate limit.
+- Settings, terminal history, and any custom music links you add are stored
+  as small JSON files under `./data/kv/`.
+
+## What's still limited, on purpose
+
+- `/proxy` is a straightforward implementation — fetch, strip headers, inject
+  a `<base>` tag so relative-path assets resolve correctly. It's not a
+  hardened production proxy. Sites with frame-busting JavaScript, or APIs
+  that reject cross-origin requests, can still misbehave.
+- Authentication uses server-side sessions and protects the filesystem, KV,
+  and proxy APIs. For production deployment, put the app behind HTTPS and a
+  persistent session store rather than the in-memory session map.
+- **System Monitor** shows live server uptime, memory, processor count,
+  sessions, host details, and a bounded superuser activity log.
+- **App Store** installation state is persisted per user; optional apps are
+  removed from the Start menu when uninstalled.
+- **Desktop icons** can be added from the desktop context menu, moved by
+  dragging, removed, and restored per user.
+- **Uploads** accept arbitrary file types except ZIP files and save binary
+  data in the current user directory.
+- **Writer**, **Sheets**, and the VS Code-inspired **Aegis IDE** provide basic
+  document, spreadsheet, and HTML app authoring workflows.
+- **Music Player** includes a curated playlist of hosted SoundHelix sample
+  recordings plus the existing synthesizer tracks.
+- `userfiles/` and `data/` are gitignored on purpose, so a fresh clone/rebuild
+  always starts from the clean default tree rather than committing your demo
+  files to source control.

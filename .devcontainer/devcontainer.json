@@ -1,0 +1,13 @@
+{
+  "name": "Aegis OS",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "postCreateCommand": "npm install",
+  "postStartCommand": "npm start &",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Aegis OS",
+      "onAutoForward": "openPreview"
+    }
+  }
+}

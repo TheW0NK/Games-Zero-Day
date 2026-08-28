@@ -36,8 +36,8 @@ Then open http://localhost:3000
   route on this same server — it fetches the target page itself, strips the
   headers that block iframe embedding, and serves the result back
   same-origin. No third-party service, no shared rate limit.
-- Settings, terminal history, and any custom music links you add are stored
-  as small JSON files under `./data/kv/`.
+- Settings and terminal history are stored as small JSON files under
+  `./data/kv/`.
 
 ## What's still limited, on purpose
 
@@ -58,8 +58,9 @@ Then open http://localhost:3000
   data in the current user directory.
 - **Writer**, **Sheets**, and the VS Code-inspired **Aegis IDE** provide basic
   document, spreadsheet, and HTML app authoring workflows.
-- **Music Player** includes a curated playlist of hosted SoundHelix sample
-  recordings plus the existing synthesizer tracks.
+- **Music Player** plays only the real `.mp3` files in each user's `Music`
+  folder — add songs there from the Files app, the player's own upload
+  button, or the Terminal, and they show up in the playlist.
 - **System setup** runs in its own full-screen layer after POST and before the
   loading bar when `needs_setup` is true. It covers installation, date/time,
   telemetry, administrator creation, and final preferences. Completing setup

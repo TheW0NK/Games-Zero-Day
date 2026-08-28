@@ -3,9 +3,9 @@
  *
  * Serves the OS frontend and backs it with real infrastructure:
  *   - /api/fs/*   real files on disk under ./userfiles
- *   - /api/kv/*   small JSON-file key/value store for settings, terminal
- *                 history, and custom music links (replaces the browser
- *                 storage APIs the artifact version had to use instead)
+ *   - /api/kv/*   small JSON-file key/value store for settings and terminal
+ *                 history (replaces the browser storage APIs the artifact
+ *                 version had to use instead)
  *   - /proxy      a real server-side proxy for the Browser app
  *
  * User accounts and cookie sessions protect the hosted OS APIs.
@@ -48,6 +48,7 @@ function defaultTree() {
       },
       Downloads: { type: 'folder', children: { 'build.zip': { type: 'file', content: '' } } },
       Pictures: { type: 'folder', children: { 'wallpaper.png': { type: 'file', content: '' } } },
+      Music: { type: 'folder', children: {} },
       Projects: { type: 'folder', children: { 'notes.txt': { type: 'file', content: 'Project notes go here.\n' } } },
       Assets: { type: 'folder', children: {} },
       Backups: { type: 'folder', children: {} },
@@ -72,6 +73,10 @@ function ensureDirs() {
     for (const entry of fs.readdirSync(USERFILES_DIR)) {
       if (entry !== 'aledeaux') fs.renameSync(path.join(USERFILES_DIR, entry), path.join(primaryHome, entry));
     }
+  }
+  // back-fill a Music folder for any user home that predates it
+  for (const user of loadUsers()) {
+    fs.mkdirSync(path.join(userHome(user), 'Music'), { recursive: true });
   }
 }
 
@@ -134,6 +139,16 @@ function requireSuperuser(req, res, next) {
 
 /* ---------------- tree <-> real files on disk ---------------- */
 
+// Extensions whose bytes are not valid UTF-8 text (or aren't meant to be
+// edited as text) — the JSON tree can't round-trip these as a string
+// without mangling them, so they're tracked but never read/rewritten as
+// text content.
+const BINARY_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'png', 'jpg', 'jpeg', 'gif', 'ico', 'pdf', 'zip', 'mp4']);
+function isBinaryName(name) {
+  const ext = String(name).includes('.') ? String(name).split('.').pop().toLowerCase() : '';
+  return BINARY_EXTENSIONS.has(ext);
+}
+
 function readTreeFromDisk(dirPath) {
   const node = { type: 'folder', children: {} };
   let entries = [];
@@ -147,12 +162,16 @@ function readTreeFromDisk(dirPath) {
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
       node.children[entry.name] = readTreeFromDisk(fullPath);
+    } else if (isBinaryName(entry.name)) {
+      // real bytes only ever travel through /api/fs/upload + /api/fs/download —
+      // the tree just carries a placeholder so it knows the file exists.
+      node.children[entry.name] = { type: 'file', binary: true, content: '' };
     } else {
       let content = '';
       try {
         content = fs.readFileSync(fullPath, 'utf-8');
       } catch (e) {
-        /* unreadable (binary, permissions, etc.) — represent as empty */
+        /* unreadable (permissions, etc.) — represent as empty */
       }
       node.children[entry.name] = { type: 'file', content };
     }
@@ -165,12 +184,27 @@ function safeName(name) {
   return String(name).replace(/[\/\\]/g, '_').replace(/^\.+/, '_');
 }
 
+// Syncs disk to match the tree: removes entries no longer present, writes
+// text file content, and creates (but never overwrites) binary files —
+// their real bytes come from /api/fs/upload, not from this JSON tree.
 function writeChildrenToDisk(node, dirPath) {
-  for (const [name, child] of Object.entries(node.children || {})) {
+  fs.mkdirSync(dirPath, { recursive: true });
+  const desired = node.children || {};
+  const desiredNames = new Set(Object.keys(desired).map(safeName));
+  let onDisk = [];
+  try {
+    onDisk = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch (e) { /* nothing there yet */ }
+  for (const entry of onDisk) {
+    if (entry.name.startsWith('.')) continue;
+    if (!desiredNames.has(entry.name)) fs.rmSync(path.join(dirPath, entry.name), { recursive: true, force: true });
+  }
+  for (const [name, child] of Object.entries(desired)) {
     const fullPath = path.join(dirPath, safeName(name));
     if (child && child.type === 'folder') {
-      fs.mkdirSync(fullPath, { recursive: true });
       writeChildrenToDisk(child, fullPath);
+    } else if (child && child.binary) {
+      if (!fs.existsSync(fullPath)) fs.writeFileSync(fullPath, Buffer.alloc(0));
     } else {
       fs.writeFileSync(fullPath, (child && child.content) || '');
     }
@@ -178,8 +212,6 @@ function writeChildrenToDisk(node, dirPath) {
 }
 
 function writeTreeToDisk(node, dirPath) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
-  fs.mkdirSync(dirPath, { recursive: true });
   writeChildrenToDisk(node, dirPath);
 }
 
@@ -333,6 +365,17 @@ app.post('/api/fs/upload', requireAuth, (req, res) => {
     recordActivity('file-upload', req.user.username, cleanName);
     res.status(201).json({ ok: true, name: cleanName });
   } catch (e) { res.status(500).json({ error: 'Upload failed: ' + e.message }); }
+});
+
+// Serves a file's real bytes (tree content is read as utf-8 and mangles binary,
+// so playback/downloads need the file straight off disk instead).
+app.get('/api/fs/download', requireAuth, (req, res) => {
+  const relativeDirectory = String(req.query.dir || '').split('/').map(safeName).filter(Boolean);
+  const cleanName = safeName(String(req.query.name || '').trim());
+  if (!cleanName) return res.status(400).json({ error: 'Missing file name' });
+  const target = path.join(userHome(req.user), ...relativeDirectory, cleanName);
+  if (!fs.existsSync(target) || !fs.statSync(target).isFile()) return res.status(404).json({ error: 'File not found' });
+  res.sendFile(target);
 });
 
 app.get('/api/system/status', requireAuth, (req, res) => {

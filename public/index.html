@@ -618,15 +618,10 @@
   .music-track-row.playing{ background:rgba(125,216,200,0.12); color:var(--accent); }
   .music-track-row .t-left{ display:flex; align-items:center; gap:8px; overflow:hidden; }
   .music-track-row .t-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .music-badge{ font-size:8.5px; padding:2px 5px; border-radius:4px; flex-shrink:0; letter-spacing:0.3px; }
-  .music-badge.lib{ background:rgba(125,216,200,0.15); color:var(--accent); }
-  .music-badge.custom{ background:rgba(185,140,240,0.18); color:#b98cf0; }
-  .music-badge.synth{ background:rgba(242,197,116,0.15); color:var(--warn); }
+  .music-badge{ font-size:8.5px; padding:2px 5px; border-radius:4px; flex-shrink:0; letter-spacing:0.3px; background:rgba(125,216,200,0.15); color:var(--accent); }
   .music-track-remove{ opacity:0.5; padding:1px 5px; border-radius:4px; flex-shrink:0; }
   .music-track-remove:hover{ opacity:1; background:rgba(255,107,107,0.15); color:var(--danger); }
   .music-add-row{ width:100%; display:flex; flex-direction:column; gap:6px; padding-top:8px; border-top:1px solid var(--panel-border); }
-  .music-add-input{ width:100%; padding:7px 10px; border-radius:7px; background:rgba(255,255,255,0.06); border:1px solid var(--panel-border); color:var(--ink); font-size:11px; outline:none; box-sizing:border-box; }
-  .music-add-input:focus{ border-color:var(--accent-soft); }
 
   /* Games (shared) */
   .game-app{ height:100%; display:flex; flex-direction:column; align-items:center; padding:16px; gap:12px; }
@@ -874,6 +869,7 @@
                   <div class="item" id="filesnav-Documents" onclick="filesNavTo(['Home','Documents'])">Documents</div>
                   <div class="item" id="filesnav-Downloads" onclick="filesNavTo(['Home','Downloads'])">Downloads</div>
                   <div class="item" id="filesnav-Pictures" onclick="filesNavTo(['Home','Pictures'])">Pictures</div>
+                  <div class="item" id="filesnav-Music" onclick="filesNavTo(['Home','Music'])">Music</div>
                   <div class="item" id="filesnav-userfiles" onclick="filesNavTo(['Home','userfiles'])">User Files</div>
                 </div>
                 <div class="files-main">
@@ -1039,9 +1035,8 @@
                 </div>
                 <div class="music-playlist" id="musicPlaylist"></div>
                 <div class="music-add-row">
-                  <input class="music-add-input" id="musicAddTitle" placeholder="Song title" />
-                  <input class="music-add-input" id="musicAddUrl" placeholder="Direct link to an audio file (.mp3)" />
-                  <button class="files-tbtn" onclick="musicAddCustom()">+ Add</button>
+                  <button class="files-tbtn" onclick="document.getElementById('musicUploadInput').click()">⬆ Add MP3s to Music folder</button>
+                  <input id="musicUploadInput" type="file" accept="audio/mpeg,.mp3" multiple style="display:none" onchange="musicUpload(this.files)">
                 </div>
               </div>
             </div>
@@ -2428,7 +2423,7 @@
       fsRoot = defaultFsTree();
       fsCwd = ['Home'];
       musicStop();
-      musicCustom = [];
+      musicIndex = 0;
       musicInited = false;
       renderFilesGrid();
       runBoot();
@@ -2450,22 +2445,6 @@
       osc.stop(audioCtx.currentTime + dur + 0.02);
     }catch(e){ /* audio not available — fail silently */ }
   }
-  function playTone(freq, dur){
-    // used for Music Player's synth tracks — plays regardless of the system-sound toggle,
-    // since starting music is an explicit user action, not ambient UI feedback
-    try{
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine'; osc.frequency.value = freq;
-      gain.gain.value = soundVolume * 0.16;
-      osc.connect(gain); gain.connect(audioCtx.destination);
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
-      osc.stop(audioCtx.currentTime + dur + 0.02);
-    }catch(e){}
-  }
-
   /* ---- expanded system sound bank ---- */
   const SFX = {
     open:          [[600,0.05,0],[820,0.06,60]],
@@ -2736,6 +2715,7 @@
         'Pictures':  { type:'folder', children:{
           'wallpaper.png': { type:'file', binary:true, content:'' }
         }},
+        'Music':     { type:'folder', children:{} },
         'Projects':  { type:'folder', children:{
           'notes.txt': { type:'file', content:'Project notes go here.\n' }
         }},
@@ -2770,6 +2750,7 @@
     const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
     if(ext === 'zip') return '📦';
     if(['png','jpg','jpeg','gif'].includes(ext)) return '🖼️';
+    if(ext === 'mp3') return '🎵';
     return '📄';
   }
   function fsUniqueName(node, base, ext){
@@ -2894,6 +2875,14 @@
       openTextEditor(fsCwd, name);
     } else if(['png','jpg','jpeg','gif'].includes(ext)){
       photosViewByName('Aurora Peak'); // demo images aren't real files — open the sample library instead
+    } else if(ext === 'mp3' && fsCwd.length === 2 && fsCwd[1] === 'Music'){
+      const tracks = musicTracks();
+      const trackIdx = tracks.indexOf(name);
+      openMusic();
+      if(trackIdx >= 0) musicPlayTrack(trackIdx);
+    } else if(ext === 'mp3'){
+      showToast('Move ' + name + ' into your Music folder to play it.');
+      beep(330, 0.06);
     } else {
       showToast("Can't open " + name + " — no app registered for this file type.");
       beep(330, 0.06);
@@ -3107,91 +3096,72 @@
   }
 
   /* ================= MUSIC PLAYER ================= */
-  // Curated demo playlist using SoundHelix's openly hosted sample recordings.
-  const musicLibrary = [
-    { type:'audio', name:'SoundHelix One', artist:'SoundHelix sample', url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-    { type:'audio', name:'SoundHelix Two', artist:'SoundHelix sample', url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-    { type:'audio', name:'SoundHelix Three', artist:'SoundHelix sample', url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
-    { type:'audio', name:'SoundHelix Four', artist:'SoundHelix sample', url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' },
-    { type:'audio', name:'SoundHelix Five', artist:'SoundHelix sample', url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3' },
-    { type:'audio', name:'SoundHelix Six', artist:'SoundHelix sample', url:'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3' },
-    { type:'synth', name:'Aurora Drift',   artist:'Aegis Sound Library', notes:[[523,0.3],[659,0.3],[784,0.3],[659,0.3],[880,0.5],[784,0.3],[659,0.3],[523,0.5]] },
-    { type:'synth', name:'Startup Chime',  artist:'Aegis Sound Library', notes:[[392,0.25],[523,0.25],[659,0.25],[784,0.6],[659,0.3],[880,0.6]] },
-    { type:'synth', name:'Quiet Corridor', artist:'Aegis Sound Library', notes:[[330,0.4],[392,0.4],[440,0.4],[392,0.4],[349,0.6],[330,0.6]] },
-    { type:'synth', name:'Recovery Theme', artist:'Aegis Sound Library', notes:[[220,0.35],[261,0.35],[196,0.35],[220,0.7],[233,0.35],[196,0.7]] }
-  ];
-  let musicCustom = []; // user-added tracks, persisted
-  let musicIndex = 0, musicPlaying = false, musicTimer = null, musicProgressTimer = null, musicElapsed = 0, musicNoteIdx = 0, musicInited = false;
+  // The playlist is just the real .mp3 files sitting in the user's Music
+  // folder — add or remove songs there (Files app, upload button below, or
+  // the Terminal) and the player picks it up.
+  let musicIndex = 0, musicPlaying = false, musicInited = false;
 
-  function musicAllTracks(){ return [...musicLibrary, ...musicCustom]; }
   const musicAudioEl = () => document.getElementById('musicAudioEl');
+  function musicDisplayName(name){ return name.replace(/\.mp3$/i, ''); }
+  function musicFolderNode(){
+    const music = fsRoot.children && fsRoot.children.Music;
+    return (music && music.type === 'folder') ? music : { type:'folder', children:{} };
+  }
+  function musicTracks(){
+    const folder = musicFolderNode();
+    return Object.keys(folder.children)
+      .filter(name => folder.children[name].type === 'file' && name.toLowerCase().endsWith('.mp3'))
+      .sort((a,b) => a.localeCompare(b));
+  }
 
   function musicRenderPlaylist(){
-    const tracks = musicAllTracks();
-    document.getElementById('musicPlaylist').innerHTML = tracks.map((t,i) => {
-      const badge = t.type === 'synth' ? '<span class="music-badge synth">SYNTH</span>' : (i < musicLibrary.length ? '<span class="music-badge lib">LIBRARY</span>' : '<span class="music-badge custom">MY MUSIC</span>');
-      const removeBtn = i >= musicLibrary.length ? '<span class="music-track-remove" onclick="musicRemoveCustom(event,' + i + ')" title="Remove">✕</span>' : '';
+    const tracks = musicTracks();
+    const list = document.getElementById('musicPlaylist');
+    if(!tracks.length){
+      list.innerHTML = '<div style="padding:16px 4px; font-size:11.5px; color:var(--ink-dim); text-align:center;">No MP3s yet — add some to your Music folder.</div>';
+      return;
+    }
+    list.innerHTML = tracks.map((name, i) => {
       return '<div class="music-track-row' + (i === musicIndex ? ' playing' : '') + '" onclick="musicPlayTrack(' + i + ')">' +
-        '<span class="t-left">' + badge + '<span class="t-name">' + escapeHtml(t.name) + '</span></span>' +
-        '<span style="display:flex; align-items:center; gap:8px; flex-shrink:0;"><span>' + escapeHtml(t.artist) + '</span>' + removeBtn + '</span>' +
+        '<span class="t-left"><span class="music-badge">MP3</span><span class="t-name">' + escapeHtml(musicDisplayName(name)) + '</span></span>' +
+        '<span class="music-track-remove" onclick="musicRemoveTrack(event,' + i + ')" title="Remove">✕</span>' +
       '</div>';
     }).join('');
   }
-  function musicTrackDuration(t){ return t.type === 'synth' ? t.notes.reduce((s,n) => s + n[1], 0) : 0; }
   function musicLoadTrack(i){
-    const tracks = musicAllTracks();
-    if(i < 0 || i >= tracks.length) return;
-    musicIndex = i;
-    const t = tracks[i];
-    document.getElementById('musicTrackName').textContent = t.name;
-    document.getElementById('musicArtistName').textContent = t.artist;
+    const tracks = musicTracks();
+    if(!tracks.length){
+      musicIndex = 0;
+      document.getElementById('musicTrackName').textContent = 'No music yet';
+      document.getElementById('musicArtistName').textContent = 'Add MP3s to your Music folder';
+      document.getElementById('musicProgressFill').style.width = '0%';
+      musicRenderPlaylist();
+      return;
+    }
+    musicIndex = ((i % tracks.length) + tracks.length) % tracks.length;
+    document.getElementById('musicTrackName').textContent = musicDisplayName(tracks[musicIndex]);
+    document.getElementById('musicArtistName').textContent = 'Your Music';
     document.getElementById('musicProgressFill').style.width = '0%';
     musicRenderPlaylist();
   }
   function musicPlayTrack(i){ musicStop(); musicLoadTrack(i); musicPlay(); }
 
-  function musicScheduleNote(){
-    if(!musicPlaying) return;
-    const t = musicAllTracks()[musicIndex];
-    if(musicNoteIdx >= t.notes.length) musicNoteIdx = 0;
-    const [freq, dur] = t.notes[musicNoteIdx];
-    playTone(freq, dur * 0.9);
-    musicNoteIdx++;
-    musicTimer = setTimeout(musicScheduleNote, dur * 1000);
-  }
-
   function musicPlay(){
-    const t = musicAllTracks()[musicIndex];
-    if(!t) return;
+    const name = musicTracks()[musicIndex];
+    if(!name) return;
     musicPlaying = true;
     document.getElementById('musicPlayBtn').textContent = '⏸';
     document.getElementById('musicArt').style.animation = 'spin 6s linear infinite';
-
-    if(t.type === 'audio'){
-      const el = musicAudioEl();
-      el.src = t.url;
-      el.volume = soundVolume;
-      el.play().catch(() => {
-        showToast("Couldn't play \"" + t.name + "\" — the link may be broken or blocked.");
-        musicStop();
-      });
-    } else {
-      musicNoteIdx = 0; musicElapsed = 0;
-      musicScheduleNote();
-      const dur = musicTrackDuration(t);
-      clearInterval(musicProgressTimer);
-      musicProgressTimer = setInterval(() => {
-        musicElapsed += 0.1;
-        const pct = Math.min(100, (musicElapsed / dur) * 100);
-        document.getElementById('musicProgressFill').style.width = pct + '%';
-        if(musicElapsed >= dur) musicElapsed = 0;
-      }, 100);
-    }
+    const el = musicAudioEl();
+    el.src = '/api/fs/download?dir=Music&name=' + encodeURIComponent(name);
+    el.volume = soundVolume;
+    el.play().catch(() => {
+      showToast('Could not play "' + musicDisplayName(name) + '".');
+      musicStop();
+    });
   }
   function musicStop(){
     musicPlaying = false;
-    clearTimeout(musicTimer);
-    clearInterval(musicProgressTimer);
     musicAudioEl().pause();
     document.getElementById('musicPlayBtn').textContent = '▶';
     document.getElementById('musicArt').style.animation = '';
@@ -3199,39 +3169,38 @@
   function musicToggle(){
     if(musicPlaying) musicStop(); else musicPlay();
   }
-  function musicNext(){ musicPlayTrack((musicIndex + 1) % musicAllTracks().length); }
-  function musicPrev(){ musicPlayTrack((musicIndex - 1 + musicAllTracks().length) % musicAllTracks().length); }
+  function musicNext(){ const n = musicTracks().length; if(n) musicPlayTrack((musicIndex + 1) % n); }
+  function musicPrev(){ const n = musicTracks().length; if(n) musicPlayTrack((musicIndex - 1 + n) % n); }
   function openMusic(){
     openApp('music');
-    if(!musicInited){ musicLoadTrack(0); musicInited = true; }
+    musicLoadTrack(musicInited ? musicIndex : 0);
+    musicInited = true;
   }
 
-  function musicAddCustom(){
-    const titleEl = document.getElementById('musicAddTitle');
-    const urlEl = document.getElementById('musicAddUrl');
-    const title = titleEl.value.trim();
-    const url = urlEl.value.trim();
-    if(!url){ showToast('Paste a direct link to an audio file first.'); return; }
-    if(!/^https?:\/\/.+/i.test(url)){ showToast('That needs to be a full https:// link.'); return; }
-    musicCustom.push({ type:'audio', name: title || 'Untitled track', artist:'Added by you', url });
-    titleEl.value = ''; urlEl.value = '';
-    persistMusicCustom();
-    musicRenderPlaylist();
-    showToast('Added to My Music');
-    beep(700, 0.05);
+  async function musicUpload(files){
+    for(const file of files){
+      if(!file.name.toLowerCase().endsWith('.mp3')){ showToast(file.name + ' is not an MP3 — skipped.'); continue; }
+      const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] || ''); reader.onerror = reject; reader.readAsDataURL(file); });
+      const response = await fetch('/api/fs/upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name:file.name, data, directory:['Music'] }) });
+      const result = await response.json().catch(() => ({}));
+      if(!response.ok){ showToast(result.error || 'Upload failed'); continue; }
+      showToast('Added ' + file.name + ' to Music');
+    }
+    document.getElementById('musicUploadInput').value = '';
+    await fsReloadFromDisk();
+    musicLoadTrack(musicIndex);
   }
-  function musicRemoveCustom(e, idx){
+  function musicRemoveTrack(e, idx){
     e.stopPropagation();
-    const customIdx = idx - musicLibrary.length;
-    if(customIdx < 0 || customIdx >= musicCustom.length) return;
+    const tracks = musicTracks();
+    const name = tracks[idx];
+    if(!name) return;
     if(idx === musicIndex) musicStop();
-    musicCustom.splice(customIdx, 1);
-    persistMusicCustom();
-    musicRenderPlaylist();
-  }
-  function persistMusicCustom(){
-    if(!persistReady || !window.storage) return;
-    window.storage.set('aegis-music-custom', JSON.stringify(musicCustom), false).catch(() => {});
+    delete musicFolderNode().children[name];
+    persistFS();
+    renderFilesGrid();
+    musicLoadTrack(musicIndex);
+    showToast('Removed ' + musicDisplayName(name));
   }
 
   /* wire the shared <audio> element once the DOM exists */
@@ -3244,8 +3213,8 @@
     el.addEventListener('ended', () => { musicNext(); });
     el.addEventListener('error', () => {
       if(musicPlaying){
-        const t = musicAllTracks()[musicIndex];
-        showToast("Couldn't load \"" + (t ? t.name : 'track') + "\" — the link may be broken.");
+        const name = musicTracks()[musicIndex];
+        showToast('Could not load "' + (name ? musicDisplayName(name) : 'track') + '".');
         musicStop();
       }
     });
@@ -3974,10 +3943,6 @@
       const res3 = await fetch('/api/fs/tree');
       if(res3.ok) fsRoot = await res3.json();
     }catch(e){ /* backend unreachable — default in-memory tree stands */ }
-    try{
-      const res4 = await window.storage.get('aegis-music-custom', false);
-      if(res4 && res4.value) musicCustom = JSON.parse(res4.value);
-    }catch(e){ /* nothing saved yet */ }
     persistReady = true;
     updateStorageStatus();
   }
@@ -3992,7 +3957,6 @@
   async function wipeAllPersistedState(){
     try{ await window.storage.delete('aegis-settings', false); }catch(e){}
     try{ await window.storage.delete('aegis-term-history', false); }catch(e){}
-    try{ await window.storage.delete('aegis-music-custom', false); }catch(e){}
     try{ await fetch('/api/fs/reset', { method: 'POST' }); }catch(e){}
   }
 

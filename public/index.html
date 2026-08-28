@@ -215,6 +215,7 @@
   .settings-nav .item.active{ background:rgba(125,216,200,0.12); color:var(--ink); }
   .settings-main{ flex:1; padding:22px 26px; overflow:auto; }
   .settings-main h2{ font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:18px; margin-bottom:18px; }
+  .icon-svg{ width:18px; height:18px; flex-shrink:0; }
   .settings-pane{ display:none; }
   .settings-pane.active{ display:block; }
   .user-form{ display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-bottom:16px; }
@@ -224,6 +225,10 @@
   .user-entry .user-meta{ min-width:0; }
   .user-entry .user-name{ font-weight:500; }
   .user-entry .user-role{ color:var(--ink-dim); font-size:10.5px; margin-top:2px; }
+  .user-status{ display:inline-block; font-size:9px; font-weight:600; letter-spacing:0.3px; padding:2px 6px; border-radius:4px; margin-top:4px; }
+  .user-status.active{ background:rgba(125,216,200,0.15); color:var(--accent); }
+  .user-status.inactive{ background:rgba(255,107,107,0.15); color:var(--danger); }
+  .user-entry.deactivated{ opacity:0.6; }
   .user-entry .user-actions{ display:flex; gap:5px; flex-shrink:0; }
   .user-error{ color:var(--danger); font-size:11px; min-height:16px; margin-bottom:8px; }
   .profile-card{ padding:14px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(255,255,255,0.04); margin-bottom:16px; }
@@ -318,6 +323,7 @@
   .ext-iframe{ flex:1; width:100%; border:none; background:#fff; }
   .proxy-loading{ display:flex; align-items:center; gap:12px; color:var(--ink-dim); font-size:13px; padding-top:30px; }
   .proxy-badge{ font-size:11px; color:var(--ink-dim); background:rgba(125,216,200,0.08); border:1px solid rgba(125,216,200,0.2); border-radius:8px; padding:9px 13px; margin-bottom:16px; line-height:1.5; }
+  .proxy-badge svg{ width:12px; height:12px; vertical-align:-1px; }
   .proxy-mode-link{ color:var(--accent); cursor:pointer; text-decoration:underline; }
   .proxy-mode-link:hover{ opacity:0.8; }
   .proxy-badge a{ color:var(--accent); }
@@ -333,6 +339,7 @@
   .browser-shortcuts{ display:flex; gap:16px; margin-top:6px; flex-wrap:wrap; justify-content:center; }
   .bshort{ width:64px; display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; }
   .bshort .ico{ width:40px; height:40px; border-radius:10px; background:rgba(255,255,255,0.07); border:1px solid var(--panel-border); display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .bshort .ico svg{ width:19px; height:19px; }
   .bshort:hover .ico{ background:rgba(255,255,255,0.13); }
   .bshort .lbl{ font-size:10.5px; color:var(--ink-dim); }
   .bpage-inner{ width:100%; max-width:560px; display:flex; flex-direction:column; gap:12px; align-self:flex-start; align-items:flex-start; text-align:left; }
@@ -343,6 +350,7 @@
   .bgame-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; width:100%; }
   .bgame{ padding:14px; border:1px solid var(--panel-border); border-radius:10px; background:rgba(255,255,255,0.04); display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; }
   .bgame .g-ico{ font-size:22px; }
+  .bgame .g-ico svg{ width:24px; height:24px; }
   .bgame .g-name{ font-size:11.5px; }
   .bpage-btn{ margin-top:4px; padding:9px 18px; border-radius:8px; background:var(--accent); color:#08110f; border:none; font-size:12px; font-weight:500; cursor:pointer; }
   .berror{ align-items:flex-start; }
@@ -362,6 +370,7 @@
   .fitem{ display:flex; flex-direction:column; align-items:center; gap:7px; cursor:pointer; padding:8px 4px; border-radius:8px; }
   .fitem:hover{ background:rgba(255,255,255,0.05); }
   .fitem .ico{ width:42px; height:42px; border-radius:9px; background:rgba(255,255,255,0.07); border:1px solid var(--panel-border); display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .fitem .ico svg{ width:20px; height:20px; }
   .fitem .lbl{ font-size:10.5px; text-align:center; color:var(--ink); word-break:break-word; }
   .fitem-rename-input{ width:76px; font-size:10.5px; text-align:center; background:rgba(255,255,255,0.08); border:1px solid var(--accent-soft); border-radius:5px; color:var(--ink); padding:2px 3px; font-family:'Inter',sans-serif; outline:none; }
 
@@ -548,6 +557,7 @@
   .rv-tile{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:18px 10px; border-radius:12px; border:1px solid rgba(242,197,116,0.18); background:rgba(255,255,255,0.03); cursor:pointer; }
   .rv-tile:hover{ background:rgba(242,197,116,0.08); border-color:rgba(242,197,116,0.4); }
   .rv-tile .rv-ico{ width:40px; height:40px; border-radius:10px; background:rgba(242,197,116,0.12); display:flex; align-items:center; justify-content:center; font-size:17px; }
+  .rv-tile .rv-ico svg{ width:20px; height:20px; }
   .rv-tile.danger .rv-ico{ background:rgba(255,107,107,0.14); }
   .rv-tile .rv-lbl{ font-size:11px; text-align:center; color:var(--ink); line-height:1.3; }
   .rv-statusbar{ flex-shrink:0; height:34px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:11px; color:var(--ink-dim); border-top:1px solid rgba(242,197,116,0.18); }
@@ -609,9 +619,11 @@
   .music-progress-track{ width:100%; height:3px; border-radius:2px; background:rgba(255,255,255,0.1); overflow:hidden; }
   .music-progress-fill{ height:100%; width:0%; background:linear-gradient(90deg, var(--accent), #5a7fe0); }
   .music-controls{ display:flex; align-items:center; gap:18px; }
-  .music-ctrl-btn{ border:none; background:none; color:var(--ink-dim); font-size:20px; cursor:pointer; }
+  .music-ctrl-btn{ border:none; background:none; color:var(--ink-dim); font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .music-ctrl-btn svg{ width:20px; height:20px; }
   .music-ctrl-btn:hover{ color:var(--ink); }
   .music-ctrl-btn.play{ width:44px; height:44px; border-radius:50%; background:var(--accent); color:#08110f; font-size:16px; display:flex; align-items:center; justify-content:center; }
+  .music-ctrl-btn.play svg{ width:20px; height:20px; }
   .music-playlist{ width:100%; flex:1; overflow:auto; display:flex; flex-direction:column; gap:4px; margin-top:6px; }
   .music-track-row{ display:flex; justify-content:space-between; padding:9px 12px; border-radius:8px; font-size:12px; color:var(--ink-dim); cursor:pointer; }
   .music-track-row:hover{ background:rgba(255,255,255,0.05); }
@@ -622,6 +634,30 @@
   .music-track-remove{ opacity:0.5; padding:1px 5px; border-radius:4px; flex-shrink:0; }
   .music-track-remove:hover{ opacity:1; background:rgba(255,107,107,0.15); color:var(--danger); }
   .music-add-row{ width:100%; display:flex; flex-direction:column; gap:6px; padding-top:8px; border-top:1px solid var(--panel-border); }
+
+  /* Chat */
+  .chat-app{ height:100%; display:flex; }
+  .chat-contacts{ width:170px; flex-shrink:0; border-right:1px solid var(--panel-border); overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:3px; }
+  .chat-contact{ display:flex; align-items:center; gap:8px; padding:8px 9px; border-radius:8px; cursor:pointer; font-size:12px; }
+  .chat-contact:hover{ background:rgba(255,255,255,0.05); }
+  .chat-contact.active{ background:rgba(125,216,200,0.12); color:var(--accent); }
+  .chat-contact .c-avatar{ width:24px; height:24px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; flex-shrink:0; }
+  .chat-contact .c-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .chat-contact.deactivated .c-name{ text-decoration:line-through; opacity:0.7; }
+  .chat-empty{ margin:auto; color:var(--ink-dim); font-size:12px; text-align:center; padding:20px; }
+  .chat-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .chat-header{ padding:12px 14px; border-bottom:1px solid var(--panel-border); font-weight:500; font-size:13px; flex-shrink:0; }
+  .chat-messages{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:8px; }
+  .chat-msg{ max-width:70%; padding:8px 11px; border-radius:12px; font-size:12.5px; line-height:1.4; word-wrap:break-word; }
+  .chat-msg.mine{ align-self:flex-end; background:var(--accent); color:#08110f; border-bottom-right-radius:3px; }
+  .chat-msg.theirs{ align-self:flex-start; background:rgba(255,255,255,0.07); border-bottom-left-radius:3px; }
+  .chat-msg .m-time{ display:block; font-size:9px; opacity:0.65; margin-top:3px; }
+  .chat-input-row{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid var(--panel-border); flex-shrink:0; }
+  .chat-input{ flex:1; padding:9px 12px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid var(--panel-border); color:var(--ink); font-size:12px; outline:none; }
+  .chat-input:focus{ border-color:var(--accent-soft); }
+  .chat-send-btn{ width:34px; height:34px; border-radius:50%; border:none; background:var(--accent); color:#08110f; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+  .chat-send-btn svg{ width:15px; height:15px; }
+  .chat-send-btn:hover{ opacity:0.9; }
 
   /* Games (shared) */
   .game-app{ height:100%; display:flex; flex-direction:column; align-items:center; padding:16px; gap:12px; }
@@ -637,6 +673,49 @@
 </style>
 </head>
 <body>
+
+<svg style="display:none" aria-hidden="true">
+  <defs>
+    <g id="i-folder"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></g>
+    <g id="i-document"><path d="M4 4h9l3 3v13H4z"/><path d="M13 4v3h3M8 12h8M8 16h8"/></g>
+    <g id="i-notepad"><path d="M4 4h9l3 3v13H4z"/><path d="M13 4v3h3"/><path d="M8 14l6-6 2 2-6 6H8z"/></g>
+    <g id="i-package"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/></g>
+    <g id="i-image"><rect x="3" y="4" width="18" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-4 4-2-2-5 5"/></g>
+    <g id="i-music-note"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></g>
+    <g id="i-upload"><path d="M12 19V5M5 12l7-7 7 7"/></g>
+    <g id="i-save"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 14h8v5H8z"/></g>
+    <g id="i-play" fill="currentColor" stroke="none"><path d="M8 5.5v13l11-6.5Z"/></g>
+    <g id="i-pause" fill="currentColor" stroke="none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></g>
+    <g id="i-skip-prev" fill="currentColor" stroke="none"><path d="M6 5h2v14H6zM19 6v12L9 12Z"/></g>
+    <g id="i-skip-next" fill="currentColor" stroke="none"><path d="M16 5h2v14h-2zM5 6v12l10-6Z"/></g>
+    <g id="i-globe"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"/></g>
+    <g id="i-gear"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/></g>
+    <g id="i-calculator"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/></g>
+    <g id="i-photo"><rect x="3" y="4" width="18" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-4 4-2-2-5 5"/></g>
+    <g id="i-snake"><path d="M4 6h6a4 4 0 0 1 4 4v4a4 4 0 0 0 4 4h2"/><circle cx="4" cy="6" r="1.5"/></g>
+    <g id="i-grid"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></g>
+    <g id="i-flask"><path d="M9 3h6M10 3v5.5L5 19a1 1 0 0 0 .9 1.5h12.2a1 1 0 0 0 .9-1.5L14 8.5V3"/></g>
+    <g id="i-lock"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></g>
+    <g id="i-warning"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 9v5M12 17h.01"/></g>
+    <g id="i-wrench"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 1 5.4-5.4l-3 3-2-2Z"/></g>
+    <g id="i-shield"><path d="M12 2 3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4Z"/></g>
+    <g id="i-newspaper"><path d="M4 4h13a2 2 0 0 1 2 2v13a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V4Z"/><path d="M19 8v10a1 1 0 0 1-1 1"/><path d="M8 8h7M8 12h7M8 16h4"/></g>
+    <g id="i-controller"><path d="M7 8h10a5 5 0 0 1 5 5v.5a2.5 2.5 0 0 1-4.7 1.2L16 13H8l-1.3 1.7A2.5 2.5 0 0 1 2 13.5V13a5 5 0 0 1 5-5Z"/><path d="M7.5 10.5v3M6 12h3"/><circle cx="16.5" cy="11" r="0.6" fill="currentColor" stroke="none"/><circle cx="18.5" cy="13" r="0.6" fill="currentColor" stroke="none"/></g>
+    <g id="i-mail"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></g>
+    <g id="i-pawn"><circle cx="12" cy="7" r="3"/><path d="M9 14h6l2 6H7z"/></g>
+    <g id="i-rocket"><path d="M12 2c3 2 5 6 5 10 0 2-1 4-2 5l-3 3-3-3c-1-1-2-3-2-5 0-4 2-8 5-10Z"/><circle cx="12" cy="9" r="1.5"/><path d="M9 17c-2 0-3 2-3 4 2 0 4-1 4-3M15 17c2 0 3 2 3 4-2 0-4-1-4-3"/></g>
+    <g id="i-cards"><rect x="3" y="5" width="12" height="16" rx="2"/><rect x="9" y="3" width="12" height="16" rx="2"/></g>
+    <g id="i-target"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></g>
+    <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+    <g id="i-power"><path d="M12 2v10M18.36 6.64a9 9 0 1 1-12.73 0"/></g>
+    <g id="i-restart"><path d="M4 12a8 8 0 1 1 2.5 5.8"/><path d="M4 17v-5h5"/></g>
+    <g id="i-chat"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M7 9h10M7 12.5h6"/></g>
+    <g id="i-send"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4Z"/></g>
+    <g id="i-terminal"><path d="M4 5h16v14H4z"/><path d="M8 9l3 3-3 3M13 15h4"/></g>
+    <g id="i-camera"><path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></g>
+    <g id="i-monitor"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></g>
+  </defs>
+</svg>
 
 <div class="viewport-wrap" id="viewportWrap">
 <div class="screen" id="screen">
@@ -758,7 +837,7 @@
                     <h2>Sound</h2>
                     <div class="setting-row"><div><div class="lab">System sounds</div><div class="sub">Play a tone on clicks, opens, and errors</div></div><div class="toggle" id="toggle-sound" onclick="toggleSetting('sound',this)"></div></div>
                     <div class="setting-row"><div><div class="lab">Volume</div><div class="sub" id="volumeVal">60%</div></div><input type="range" class="slider-input" id="volumeSlider" min="0" max="100" value="60" oninput="setVolume(this.value)"></div>
-                    <div class="setting-row"><div><div class="lab">Test sound</div><div class="sub">Play the current system tone</div></div><button class="mini-btn" onclick="beep(660,0.09)">▶ Play</button></div>
+                    <div class="setting-row"><div><div class="lab">Test sound</div><div class="sub">Play the current system tone</div></div><button class="mini-btn" onclick="beep(660,0.09)"><svg class="icon-svg" style="width:12px;height:12px;vertical-align:-1px" viewBox="0 0 24 24"><use href="#i-play"/></svg> Play</button></div>
                   </div>
 
                   <div class="settings-pane" id="pane-network">
@@ -876,9 +955,9 @@
                   <div class="files-toolbar">
                     <button class="files-tbtn" onclick="filesGoUp()" title="Up">↑</button>
                     <div class="files-breadcrumb" id="filesBreadcrumb">Home</div>
-                    <button class="files-tbtn" onclick="filesNewFolder()" title="New folder">📁+</button>
-                    <button class="files-tbtn" onclick="filesNewFile()" title="New text file">📄+</button>
-                    <button class="files-tbtn" onclick="document.getElementById('fileUploadInput').click()" title="Upload files">⬆ Upload</button>
+                    <button class="files-tbtn" onclick="filesNewFolder()" title="New folder"><svg class="icon-svg" style="width:12px;height:12px;vertical-align:-1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-folder"/></svg>+</button>
+                    <button class="files-tbtn" onclick="filesNewFile()" title="New text file"><svg class="icon-svg" style="width:12px;height:12px;vertical-align:-1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-document"/></svg>+</button>
+                    <button class="files-tbtn" onclick="document.getElementById('fileUploadInput').click()" title="Upload files"><svg class="icon-svg" style="width:12px;height:12px;vertical-align:-1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-upload"/></svg> Upload</button>
                     <input id="fileUploadInput" type="file" multiple style="display:none" onchange="filesUpload(this.files)">
                     <button class="files-tbtn" onclick="fsReloadFromDisk()" title="Reload from the real files on the server">↻ Reload from Disk</button>
                   </div>
@@ -900,7 +979,7 @@
             </div>
             <div class="win-body" style="display:flex; flex-direction:column;">
               <div class="editor-toolbar">
-                <button class="files-tbtn" onclick="editorSave()" title="Save (Ctrl+S)">💾 Save</button>
+                <button class="files-tbtn" onclick="editorSave()" title="Save (Ctrl+S)"><svg class="icon-svg" style="width:12px;height:12px;vertical-align:-1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-save"/></svg> Save</button>
                 <span class="editor-hint">Plain text — .txt / .md</span>
               </div>
               <textarea id="editorTextarea" class="editor-textarea" spellcheck="false" oninput="editorMarkDirty()" onkeydown="editorKeydown(event)"></textarea>
@@ -1024,19 +1103,44 @@
             <div class="win-body">
               <div class="music-app">
                 <audio id="musicAudioEl" preload="none"></audio>
-                <div class="music-art" id="musicArt">🎵</div>
+                <div class="music-art" id="musicArt"><svg class="icon-svg" style="width:44px;height:44px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><use href="#i-music-note"/></svg></div>
                 <div class="music-title" id="musicTrackName">—</div>
                 <div class="music-artist" id="musicArtistName">—</div>
                 <div class="music-progress-track"><div class="music-progress-fill" id="musicProgressFill"></div></div>
                 <div class="music-controls">
-                  <button class="music-ctrl-btn" onclick="musicPrev()" title="Previous">⏮</button>
-                  <button class="music-ctrl-btn play" id="musicPlayBtn" onclick="musicToggle()" title="Play/Pause">▶</button>
-                  <button class="music-ctrl-btn" onclick="musicNext()" title="Next">⏭</button>
+                  <button class="music-ctrl-btn" onclick="musicPrev()" title="Previous"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#i-skip-prev"/></svg></button>
+                  <button class="music-ctrl-btn play" id="musicPlayBtn" onclick="musicToggle()" title="Play/Pause"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#i-play"/></svg></button>
+                  <button class="music-ctrl-btn" onclick="musicNext()" title="Next"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#i-skip-next"/></svg></button>
                 </div>
                 <div class="music-playlist" id="musicPlaylist"></div>
                 <div class="music-add-row">
-                  <button class="files-tbtn" onclick="document.getElementById('musicUploadInput').click()">⬆ Add MP3s to Music folder</button>
+                  <button class="files-tbtn" onclick="document.getElementById('musicUploadInput').click()"><svg class="icon-svg" style="width:12px;height:12px;vertical-align:-1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-upload"/></svg> Add MP3s to Music folder</button>
                   <input id="musicUploadInput" type="file" accept="audio/mpeg,.mp3" multiple style="display:none" onchange="musicUpload(this.files)">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHAT WINDOW -->
+          <div class="window" id="win-chat" style="left:480px; top:90px; width:620px; height:460px;">
+            <div class="win-titlebar" onmousedown="startDrag(event,'win-chat')" ondblclick="maximizeApp('chat')">
+              <div class="win-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chat"/></svg> Chat</div>
+              <div class="win-controls">
+                <button class="win-btn min" onclick="minimizeApp('chat')"></button>
+                <button class="win-btn max" onclick="maximizeApp('chat')"></button>
+                <button class="win-btn close" onclick="closeApp('chat')"></button>
+              </div>
+            </div>
+            <div class="win-body">
+              <div class="chat-app">
+                <div class="chat-contacts" id="chatContacts"></div>
+                <div class="chat-main">
+                  <div class="chat-header" id="chatHeader">Select someone to chat with</div>
+                  <div class="chat-messages" id="chatMessages"></div>
+                  <div class="chat-input-row">
+                    <input class="chat-input" id="chatInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter') chatSend()">
+                    <button class="chat-send-btn" id="chatSendBtn" onclick="chatSend()" title="Send"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1087,31 +1191,32 @@
           <input class="sm-search" placeholder="Search apps…" disabled />
           <div class="sm-label">Pinned</div>
           <div class="sm-grid">
-            <div class="sm-app" onclick="openApp('browser'); toggleFlyout('startMenu',false)"><div class="ico">🌐</div><div class="lbl">Browser</div></div>
-            <div class="sm-app" onclick="openApp('files'); toggleFlyout('startMenu',false)"><div class="ico">📁</div><div class="lbl">Files</div></div>
-            <div class="sm-app" onclick="openApp('terminal'); toggleFlyout('startMenu',false)"><div class="ico">⌥</div><div class="lbl">Terminal</div></div>
-            <div class="sm-app" onclick="openApp('settings'); toggleFlyout('startMenu',false)"><div class="ico">⚙</div><div class="lbl">Settings</div></div>
+            <div class="sm-app" onclick="openApp('browser'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-globe"/></svg></div><div class="lbl">Browser</div></div>
+            <div class="sm-app" onclick="openApp('files'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-folder"/></svg></div><div class="lbl">Files</div></div>
+            <div class="sm-app" onclick="openApp('terminal'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-terminal"/></svg></div><div class="lbl">Terminal</div></div>
+            <div class="sm-app" onclick="openApp('settings'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-gear"/></svg></div><div class="lbl">Settings</div></div>
+            <div class="sm-app" onclick="openApp('chat'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chat"/></svg></div><div class="lbl">Chat</div></div>
           </div>
           <div class="sm-label">Apps</div>
           <div class="sm-grid">
-            <div class="sm-app" data-optional-app="calculator" onclick="openApp('calculator'); toggleFlyout('startMenu',false)"><div class="ico">🧮</div><div class="lbl">Calculator</div></div>
-            <div class="sm-app" data-optional-app="photos" onclick="openApp('photos'); photosRenderGrid(); toggleFlyout('startMenu',false)"><div class="ico">🖼️</div><div class="lbl">Photos</div></div>
-            <div class="sm-app" onclick="openApp('appstore'); toggleFlyout('startMenu',false)"><div class="ico">▦</div><div class="lbl">App Store</div></div>
+            <div class="sm-app" data-optional-app="calculator" onclick="openApp('calculator'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-calculator"/></svg></div><div class="lbl">Calculator</div></div>
+            <div class="sm-app" data-optional-app="photos" onclick="openApp('photos'); photosRenderGrid(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-photo"/></svg></div><div class="lbl">Photos</div></div>
+            <div class="sm-app" onclick="openApp('appstore'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-grid"/></svg></div><div class="lbl">App Store</div></div>
             <div class="sm-app" data-optional-app="ide" onclick="openApp('ide'); toggleFlyout('startMenu',false)"><div class="ico">&lt;/&gt;</div><div class="lbl">IDE</div></div>
-            <div class="sm-app" data-optional-app="writer" onclick="openApp('writer'); toggleFlyout('startMenu',false)"><div class="ico">▤</div><div class="lbl">Writer</div></div>
-            <div class="sm-app" data-optional-app="sheets" onclick="openApp('sheets'); toggleFlyout('startMenu',false)"><div class="ico">▦</div><div class="lbl">Sheets</div></div>
-            <div class="sm-app" data-optional-app="camera" onclick="openApp('camera'); cameraStart(); toggleFlyout('startMenu',false)"><div class="ico">◎</div><div class="lbl">Camera</div></div>
-            <div class="sm-app" onclick="openApp('monitor'); toggleFlyout('startMenu',false)"><div class="ico">▥</div><div class="lbl">Monitor</div></div>
-            <div class="sm-app" onclick="openMusic(); toggleFlyout('startMenu',false)"><div class="ico">🎵</div><div class="lbl">Music</div></div>
-            <div class="sm-app" onclick="openSnake(); toggleFlyout('startMenu',false)"><div class="ico">🐍</div><div class="lbl">Snake</div></div>
-            <div class="sm-app" onclick="openG2048(); toggleFlyout('startMenu',false)"><div class="ico">🔢</div><div class="lbl">2048</div></div>
-            <div class="sm-app" onclick="openApp('test'); toggleFlyout('startMenu',false)"><div class="ico">🧪</div><div class="lbl">Test Fns</div></div>
+            <div class="sm-app" data-optional-app="writer" onclick="openApp('writer'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-document"/></svg></div><div class="lbl">Writer</div></div>
+            <div class="sm-app" data-optional-app="sheets" onclick="openApp('sheets'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-grid"/></svg></div><div class="lbl">Sheets</div></div>
+            <div class="sm-app" data-optional-app="camera" onclick="openApp('camera'); cameraStart(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-camera"/></svg></div><div class="lbl">Camera</div></div>
+            <div class="sm-app" onclick="openApp('monitor'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-monitor"/></svg></div><div class="lbl">Monitor</div></div>
+            <div class="sm-app" onclick="openMusic(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-music-note"/></svg></div><div class="lbl">Music</div></div>
+            <div class="sm-app" onclick="openSnake(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-snake"/></svg></div><div class="lbl">Snake</div></div>
+            <div class="sm-app" onclick="openG2048(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-grid"/></svg></div><div class="lbl">2048</div></div>
+            <div class="sm-app" onclick="openApp('test'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-flask"/></svg></div><div class="lbl">Test Fns</div></div>
           </div>
           <div class="sm-label">Power</div>
           <div class="sm-grid">
-            <div class="sm-app" onclick="lockNow(); toggleFlyout('startMenu',false)"><div class="ico">🔒</div><div class="lbl">Lock</div></div>
-            <div class="sm-app" onclick="restartNow(); toggleFlyout('startMenu',false)"><div class="ico">↻</div><div class="lbl">Restart</div></div>
-            <div class="sm-app" onclick="shutdownNow(); toggleFlyout('startMenu',false)"><div class="ico">⏻</div><div class="lbl">Shut down</div></div>
+            <div class="sm-app" onclick="lockNow(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-lock"/></svg></div><div class="lbl">Lock</div></div>
+            <div class="sm-app" onclick="restartNow(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-restart"/></svg></div><div class="lbl">Restart</div></div>
+            <div class="sm-app" onclick="shutdownNow(); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-power"/></svg></div><div class="lbl">Shut down</div></div>
           </div>
           <div class="sm-footer">
             <div class="sm-user"><div class="av">A</div>Welcome back</div>
@@ -1200,11 +1305,11 @@
           </div>
           <div class="rv-grid">
             <div class="rv-tile" onclick="openApp('terminal')">
-              <div class="rv-ico">⌥</div>
+              <div class="rv-ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-terminal"/></svg></div>
               <div class="rv-lbl">System Terminal</div>
             </div>
             <div class="rv-tile" onclick="openStartupSettings()">
-              <div class="rv-ico">⚙</div>
+              <div class="rv-ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-gear"/></svg></div>
               <div class="rv-lbl">Bootup Settings</div>
             </div>
             <div class="rv-tile" onclick="openApp('recoverytools')">
@@ -1212,11 +1317,11 @@
               <div class="rv-lbl">Diagnostics</div>
             </div>
             <div class="rv-tile" onclick="openApp('test')">
-              <div class="rv-ico">🧪</div>
+              <div class="rv-ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-flask"/></svg></div>
               <div class="rv-lbl">System Test Functions</div>
             </div>
             <div class="rv-tile" onclick="openApp('poweractions')">
-              <div class="rv-ico">⏻</div>
+              <div class="rv-ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-power"/></svg></div>
               <div class="rv-lbl">Power Actions</div>
             </div>
             <div class="rv-tile" onclick="openApp('versioncontrol')">
@@ -1277,7 +1382,7 @@
                 <div class="test-desc">Trigger system states for QA — used to preview crash dialogs, freeze behavior, and power transitions without waiting for the real thing.</div>
                 <div class="test-grid">
                   <div class="test-btn crash" onclick="triggerCrash()">
-                    <div class="t-name">⚠ Force Crash</div>
+                    <div class="t-name"><svg class="icon-svg" style="width:13px;height:13px;vertical-align:-2px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-warning"/></svg> Force Crash</div>
                     <div class="t-sub">Shows the stop-error screen, then auto-restarts</div>
                   </div>
                   <div class="test-btn freeze" onclick="triggerFreeze()">
@@ -1289,11 +1394,11 @@
                     <div class="t-sub">Runs the normal restart sequence</div>
                   </div>
                   <div class="test-btn" onclick="shutdownNow()">
-                    <div class="t-name">⏻ Force Shutdown</div>
+                    <div class="t-name"><svg class="icon-svg" style="width:13px;height:13px;vertical-align:-2px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-power"/></svg> Force Shutdown</div>
                     <div class="t-sub">Runs the normal shutdown sequence</div>
                   </div>
                   <div class="test-btn" onclick="enterRecoveryMode()">
-                    <div class="t-name">🛠 Enter Recovery Mode</div>
+                    <div class="t-name"><svg class="icon-svg" style="width:13px;height:13px;vertical-align:-2px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-wrench"/></svg> Enter Recovery Mode</div>
                     <div class="t-sub">Shortcut — skips the 5-key boot sequence</div>
                   </div>
                 </div>
@@ -1702,23 +1807,32 @@
   pwInput.addEventListener('keydown', e => { if(e.key === 'Enter') unlock(); });
   usernameInput.addEventListener('keydown', e => { if(e.key === 'Enter') unlock(); });
   let currentUser = null;
+  const lockHintEl = document.querySelector('.lock-hint');
+  const lockHintDefault = lockHintEl ? lockHintEl.textContent : '';
+  let lockHintResetTimer = null;
   async function unlock(){
     const lock = document.getElementById('layer-lock');
-    let response;
+    let response, data;
     try{
       response = await fetch('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: usernameInput.value.trim(), password: pwInput.value })
       });
-    }catch(e){ response = null; }
+      data = await response.json().catch(() => ({}));
+    }catch(e){ response = null; data = {}; }
     if(!response || !response.ok){
       lock.classList.add('shake');
       playSfx('unlockFail');
       pwInput.value = '';
+      if(lockHintEl){
+        lockHintEl.textContent = data.error || 'Incorrect username or password';
+        clearTimeout(lockHintResetTimer);
+        lockHintResetTimer = setTimeout(() => { lockHintEl.textContent = lockHintDefault; }, 4000);
+      }
       setTimeout(() => { lock.classList.remove('shake'); pwInput.focus(); }, 420);
       return;
     }
-    currentUser = (await response.json()).user;
+    currentUser = data.user;
     document.querySelector('.lock-username').textContent = currentUser.username;
     document.querySelector('.avatar').textContent = currentUser.username.charAt(0).toUpperCase();
     document.getElementById('usersNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
@@ -1737,6 +1851,21 @@
   }
   function lockNow(){ playSfx('lock'); setLayer('layer-lock'); }
 
+  // If a superuser deactivates the signed-in account elsewhere, this catches
+  // it within half a minute instead of leaving the session usable until the
+  // next sign-in attempt.
+  setInterval(async () => {
+    if(!document.getElementById('layer-desktop').classList.contains('active')) return;
+    try{
+      const res = await fetch('/api/auth/me');
+      if(res.status === 401){
+        currentUser = null;
+        lockNow();
+        showToast('Your account was deactivated.', 4000);
+      }
+    }catch(e){ /* offline — don't force a lock on a network blip */ }
+  }, 30000);
+
   async function loadUsers(){
     const list = document.getElementById('userList');
     if(!list || !currentUser || currentUser.role !== 'superuser') return;
@@ -1744,12 +1873,27 @@
       const res = await fetch('/api/users');
       if(!res.ok) throw new Error('Could not load users');
       const data = await res.json();
-      list.innerHTML = data.users.map(user =>
-        '<div class="user-entry"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + '</div></div>' +
-        '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' +
-        '<button class="mini-btn danger" onclick="deleteUser(\'' + escapeAttr(user.id) + '\')">Remove</button></div></div>'
-      ).join('');
+      list.innerHTML = data.users.map(user => {
+        const isSelf = user.id === currentUser.id;
+        const isPrimary = user.username === 'aledeaux';
+        const statusBadge = user.active === false
+          ? '<span class="user-status inactive">Deactivated</span>'
+          : '<span class="user-status active">Active</span>';
+        const toggleBtn = (!isSelf && !isPrimary)
+          ? '<button class="mini-btn' + (user.active === false ? '' : ' danger') + '" onclick="toggleUserActive(\'' + escapeAttr(user.id) + '\', ' + (user.active === false) + ')">' + (user.active === false ? 'Reactivate' : 'Deactivate') + '</button>'
+          : '';
+        return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + '</div>' + statusBadge + '</div>' +
+          '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' + toggleBtn +
+          '<button class="mini-btn danger" onclick="deleteUser(\'' + escapeAttr(user.id) + '\')">Remove</button></div></div>';
+      }).join('');
     }catch(e){ document.getElementById('userError').textContent = e.message; }
+  }
+  async function toggleUserActive(id, reactivate){
+    const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: reactivate }) });
+    const data = await res.json();
+    if(!res.ok){ showUserError(data.error); return; }
+    loadUsers();
+    showToast(reactivate ? 'User reactivated' : 'User deactivated');
   }
 
   function showUserError(message){ document.getElementById('userError').textContent = message || ''; }
@@ -1813,6 +1957,7 @@
     if(id === 'writer') officeLoad('writer');
     if(id === 'sheets') officeLoad('sheets');
     if(id === 'monitor') monitorStart();
+    if(id === 'chat') chatLoadContacts();
   }
   function closeApp(id){
     document.getElementById('win-'+id).classList.remove('open');
@@ -1985,14 +2130,17 @@
   }
 
   /* ---- ALT+TAB SWITCHER ---- */
+  function iconSvg(name){
+    return '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-' + name + '"/></svg>';
+  }
   const appMeta = {
-    settings:{label:'Settings', icon:'⚙'}, browser:{label:'Browser', icon:'🌐'}, files:{label:'Files', icon:'📁'},
-    terminal:{label:'Terminal', icon:'⌥'}, test:{label:'Test Functions', icon:'🧪'},
-    startupSettings:{label:'Startup Settings', icon:'🛡'}, poweractions:{label:'Power Actions', icon:'⏻'},
+    settings:{label:'Settings', icon:iconSvg('gear')}, browser:{label:'Browser', icon:iconSvg('globe')}, files:{label:'Files', icon:iconSvg('folder')},
+    terminal:{label:'Terminal', icon:iconSvg('terminal')}, test:{label:'Test Functions', icon:iconSvg('flask')},
+    startupSettings:{label:'Startup Settings', icon:iconSvg('shield')}, poweractions:{label:'Power Actions', icon:iconSvg('power')},
     versioncontrol:{label:'Version Control', icon:'⧉'}, systemwipe:{label:'System Wipe', icon:'⨯'}, bios:{label:'Firmware Setup', icon:'▣'}, setup:{label:'Aegis OS Setup', icon:'✦'}, recoverytools:{label:'Recovery Diagnostics', icon:'◈'},
-    texteditor:{label:'Text Editor', icon:'📝'}, calculator:{label:'Calculator', icon:'🧮'},
-    photos:{label:'Photo Viewer', icon:'🖼️'}, appstore:{label:'App Store', icon:'▦'}, ide:{label:'Aegis IDE', icon:'</>'}, writer:{label:'Writer', icon:'▤'}, sheets:{label:'Sheets', icon:'▦'}, camera:{label:'Camera', icon:'◎'}, monitor:{label:'System Monitor', icon:'▥'}, music:{label:'Music Player', icon:'🎵'},
-    snake:{label:'Snake', icon:'🐍'}, g2048:{label:'2048', icon:'🔢'}
+    texteditor:{label:'Text Editor', icon:iconSvg('notepad')}, calculator:{label:'Calculator', icon:iconSvg('calculator')},
+    photos:{label:'Photo Viewer', icon:iconSvg('photo')}, appstore:{label:'App Store', icon:iconSvg('grid')}, ide:{label:'Aegis IDE', icon:'</>'}, writer:{label:'Writer', icon:iconSvg('document')}, sheets:{label:'Sheets', icon:iconSvg('grid')}, camera:{label:'Camera', icon:iconSvg('camera')}, monitor:{label:'System Monitor', icon:iconSvg('monitor')}, music:{label:'Music Player', icon:iconSvg('music-note')},
+    snake:{label:'Snake', icon:iconSvg('snake')}, g2048:{label:'2048', icon:iconSvg('grid')}, chat:{label:'Chat', icon:iconSvg('chat')}
   };
   let altTabActive = false, altTabIndex = 0;
   function getOpenWindowIds(){
@@ -2746,12 +2894,12 @@
     });
   }
   function fsIconFor(name, type){
-    if(type === 'folder') return '📁';
+    if(type === 'folder') return iconSvg('folder');
     const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-    if(ext === 'zip') return '📦';
-    if(['png','jpg','jpeg','gif'].includes(ext)) return '🖼️';
-    if(ext === 'mp3') return '🎵';
-    return '📄';
+    if(ext === 'zip') return iconSvg('package');
+    if(['png','jpg','jpeg','gif'].includes(ext)) return iconSvg('image');
+    if(ext === 'mp3') return iconSvg('music-note');
+    return iconSvg('document');
   }
   function fsUniqueName(node, base, ext){
     let name = ext ? base + ext : base;
@@ -3150,7 +3298,7 @@
     const name = musicTracks()[musicIndex];
     if(!name) return;
     musicPlaying = true;
-    document.getElementById('musicPlayBtn').textContent = '⏸';
+    document.getElementById('musicPlayBtn').innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24"><use href="#i-pause"/></svg>';
     document.getElementById('musicArt').style.animation = 'spin 6s linear infinite';
     const el = musicAudioEl();
     el.src = '/api/fs/download?dir=Music&name=' + encodeURIComponent(name);
@@ -3163,7 +3311,7 @@
   function musicStop(){
     musicPlaying = false;
     musicAudioEl().pause();
-    document.getElementById('musicPlayBtn').textContent = '▶';
+    document.getElementById('musicPlayBtn').innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24"><use href="#i-play"/></svg>';
     document.getElementById('musicArt').style.animation = '';
   }
   function musicToggle(){
@@ -3219,6 +3367,87 @@
       }
     });
   });
+
+  /* ================= CHAT ================= */
+  // Direct messages between users. Contacts are every other account on this
+  // machine; the server keeps the real history, this just polls for new
+  // messages while the window is open.
+  let chatContacts = [];
+  let chatActiveWith = null;
+  let chatLastAt = null;
+
+  async function chatLoadContacts(){
+    try{
+      const res = await fetch('/api/chat/contacts');
+      if(!res.ok) return;
+      const data = await res.json();
+      chatContacts = data.contacts;
+      chatRenderContacts();
+      if(chatActiveWith && !chatContacts.some(c => c.username === chatActiveWith)) chatActiveWith = null;
+      if(!chatActiveWith && chatContacts.length) chatSelectContact(chatContacts[0].username);
+    }catch(e){ /* offline — leave the last known contact list up */ }
+  }
+  function chatRenderContacts(){
+    const el = document.getElementById('chatContacts');
+    if(!el) return;
+    if(!chatContacts.length){ el.innerHTML = '<div class="chat-empty">No other users yet</div>'; return; }
+    el.innerHTML = chatContacts.map(c =>
+      '<div class="chat-contact' + (c.username === chatActiveWith ? ' active' : '') + (c.active === false ? ' deactivated' : '') + '" onclick="chatSelectContact(\'' + escapeAttr(c.username) + '\')">' +
+        '<div class="c-avatar">' + escapeHtml(c.username.charAt(0).toUpperCase()) + '</div>' +
+        '<span class="c-name">' + escapeHtml(c.username) + '</span>' +
+      '</div>'
+    ).join('');
+  }
+  function chatSelectContact(username){
+    chatActiveWith = username;
+    chatLastAt = null;
+    document.getElementById('chatMessages').innerHTML = '';
+    document.getElementById('chatHeader').textContent = username;
+    chatRenderContacts();
+    chatFetchMessages(true);
+  }
+  async function chatFetchMessages(initial){
+    if(!chatActiveWith) return;
+    try{
+      let url = '/api/chat/messages?with=' + encodeURIComponent(chatActiveWith);
+      if(chatLastAt && !initial) url += '&since=' + encodeURIComponent(chatLastAt);
+      const res = await fetch(url);
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data.messages.length) chatAppendMessages(data.messages);
+    }catch(e){ /* offline — try again on the next poll */ }
+  }
+  function chatAppendMessages(messages){
+    const el = document.getElementById('chatMessages');
+    if(!el) return;
+    const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    messages.forEach(m => {
+      const mine = m.from === currentUser.username;
+      const row = document.createElement('div');
+      row.className = 'chat-msg ' + (mine ? 'mine' : 'theirs');
+      const time = new Date(m.at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      row.innerHTML = escapeHtml(m.text) + '<span class="m-time">' + time + '</span>';
+      el.appendChild(row);
+      chatLastAt = m.at;
+    });
+    if(wasNearBottom) el.scrollTop = el.scrollHeight;
+  }
+  async function chatSend(){
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if(!text || !chatActiveWith) return;
+    input.value = '';
+    try{
+      const res = await fetch('/api/chat/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to: chatActiveWith, text }) });
+      const data = await res.json();
+      if(!res.ok){ showToast(data.error || 'Could not send message'); return; }
+      chatAppendMessages([data.message]);
+    }catch(e){ showToast('Could not send message — is the server still running?'); }
+  }
+  setInterval(() => {
+    const w = document.getElementById('win-chat');
+    if(w && w.classList.contains('open')) chatFetchMessages(false);
+  }, 3000);
 
   /* ================= SNAKE ================= */
   let snakeState = null;
@@ -3702,7 +3931,7 @@
       return {
         title, noPad: false,
         html: '<div class="bpage-inner">' +
-          '<div class="proxy-badge">📄 <b>Reader Mode</b> — text only, no scripts or styling, more reliable on sites that block proxies. ' +
+          '<div class="proxy-badge">' + iconSvg('document') + ' <b>Reader Mode</b> — text only, no scripts or styling, more reliable on sites that block proxies. ' +
           '<span class="proxy-mode-link" onclick="browserSwitchMode(\'full\')">Try Full Page</span> · ' +
           '<a href="' + escapeAttr(url) + '" target="_blank" rel="noopener">Open the real page</a></div>' +
           '<div class="proxy-content">' + markdownToHtml(text) + '</div>' +
@@ -3785,11 +4014,11 @@
           '<div class="browser-logo">aegis</div>' +
           '<input class="browser-search" placeholder="Search, or type a real address like wikipedia.org" onkeydown="if(event.key===\'Enter\') bsearchSubmit(this)">' +
           '<div class="browser-shortcuts">' +
-            '<div class="bshort" onclick="navigate(\'aegis://news\',true)"><div class="ico">📰</div><div class="lbl">News</div></div>' +
-            '<div class="bshort" onclick="navigate(\'aegis://games\',true)"><div class="ico">🎮</div><div class="lbl">Games</div></div>' +
-            '<div class="bshort" onclick="navigate(\'aegis://mail\',true)"><div class="ico">✉️</div><div class="lbl">Mail</div></div>' +
-            '<div class="bshort" onclick="navigate(\'aegis://files\',true)"><div class="ico">📁</div><div class="lbl">Files</div></div>' +
-            '<div class="bshort" onclick="newTab(\'aegis://home\')"><div class="ico">＋</div><div class="lbl">New tab</div></div>' +
+            '<div class="bshort" onclick="navigate(\'aegis://news\',true)"><div class="ico">' + iconSvg('newspaper') + '</div><div class="lbl">News</div></div>' +
+            '<div class="bshort" onclick="navigate(\'aegis://games\',true)"><div class="ico">' + iconSvg('controller') + '</div><div class="lbl">Games</div></div>' +
+            '<div class="bshort" onclick="navigate(\'aegis://mail\',true)"><div class="ico">' + iconSvg('mail') + '</div><div class="lbl">Mail</div></div>' +
+            '<div class="bshort" onclick="navigate(\'aegis://files\',true)"><div class="ico">' + iconSvg('folder') + '</div><div class="lbl">Files</div></div>' +
+            '<div class="bshort" onclick="newTab(\'aegis://home\')"><div class="ico">' + iconSvg('plus') + '</div><div class="lbl">New tab</div></div>' +
           '</div>' };
 
       case 'aegis://news':
@@ -3807,12 +4036,12 @@
           '<div class="bpage-inner">' +
             '<div class="bpage-title">Game library</div>' +
             '<div class="bgame-grid">' +
-              '<div class="bgame" onclick="openSnake()" style="cursor:pointer;"><div class="g-ico">🐍</div><div class="g-name">Snake</div></div>' +
-              '<div class="bgame" onclick="openG2048()" style="cursor:pointer;"><div class="g-ico">🔢</div><div class="g-name">2048</div></div>' +
-              '<div class="bgame"><div class="g-ico">♟️</div><div class="g-name">Blockwars</div></div>' +
-              '<div class="bgame"><div class="g-ico">🚀</div><div class="g-name">Orbit Run</div></div>' +
-              '<div class="bgame"><div class="g-ico">🃏</div><div class="g-name">Solitaire</div></div>' +
-              '<div class="bgame"><div class="g-ico">🎯</div><div class="g-name">Ricochet</div></div>' +
+              '<div class="bgame" onclick="openSnake()" style="cursor:pointer;"><div class="g-ico">' + iconSvg('snake') + '</div><div class="g-name">Snake</div></div>' +
+              '<div class="bgame" onclick="openG2048()" style="cursor:pointer;"><div class="g-ico">' + iconSvg('grid') + '</div><div class="g-name">2048</div></div>' +
+              '<div class="bgame"><div class="g-ico">' + iconSvg('pawn') + '</div><div class="g-name">Blockwars</div></div>' +
+              '<div class="bgame"><div class="g-ico">' + iconSvg('rocket') + '</div><div class="g-name">Orbit Run</div></div>' +
+              '<div class="bgame"><div class="g-ico">' + iconSvg('cards') + '</div><div class="g-name">Solitaire</div></div>' +
+              '<div class="bgame"><div class="g-ico">' + iconSvg('target') + '</div><div class="g-name">Ricochet</div></div>' +
             '</div>' +
             '<div class="rmeta">Snake and 2048 open for real. The rest are just demo tiles.</div>' +
           '</div>' };

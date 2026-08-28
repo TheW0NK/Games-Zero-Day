@@ -23,6 +23,7 @@ const USERFILES_DIR = path.join(__dirname, 'userfiles');
 const KV_DIR = path.join(__dirname, 'data', 'kv');
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const ACTIVITY_FILE = path.join(__dirname, 'data', 'activity.json');
+const CHAT_FILE = path.join(__dirname, 'data', 'chat.json');
 const sessions = new Map();
 const startedAt = Date.now();
 
@@ -67,6 +68,7 @@ function ensureDirs() {
     saveUsers([{ id: crypto.randomUUID(), username: 'aledeaux', passwordHash: hashPassword('passwood'), role: 'superuser', createdAt: new Date().toISOString() }]);
   }
   if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, '[]\n');
+  if (!fs.existsSync(CHAT_FILE)) fs.writeFileSync(CHAT_FILE, '[]\n');
   const primaryHome = path.join(USERFILES_DIR, 'aledeaux');
   if (!fs.existsSync(primaryHome)) {
     fs.mkdirSync(primaryHome, { recursive: true });
@@ -117,12 +119,18 @@ function saveUsers(users) {
 }
 
 function publicUser(user) {
-  return { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+  return { id: user.id, username: user.username, role: user.role, active: user.active !== false, createdAt: user.createdAt };
 }
 
+// Re-checks the session against the live user record on every request (rather
+// than trusting the snapshot taken at login) so a deactivation or role change
+// takes effect immediately instead of only at the next sign-in.
 function currentUser(req) {
   const token = req.headers.cookie && req.headers.cookie.match(/(?:^|; )aegis_session=([^;]+)/)?.[1];
-  return token ? sessions.get(token) : null;
+  if (!token || !sessions.has(token)) return null;
+  const liveUser = loadUsers().find(u => u.id === sessions.get(token).id);
+  if (!liveUser || liveUser.active === false) { sessions.delete(token); return null; }
+  return publicUser(liveUser);
 }
 
 function requireAuth(req, res, next) {
@@ -226,6 +234,7 @@ app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   const user = loadUsers().find(candidate => candidate.username === String(username || ''));
   if (!user || !passwordMatches(password, user.passwordHash)) return res.status(401).json({ error: 'Invalid username or password' });
+  if (user.active === false) return res.status(403).json({ error: 'This account has been deactivated. Contact an administrator.' });
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, publicUser(user));
   recordActivity('login', user.username);
@@ -306,17 +315,30 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
   const users = loadUsers();
   const user = users.find(candidate => candidate.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { username, password, role } = req.body || {};
+  const { username, password, role, active } = req.body || {};
   if (username !== undefined && !/^[a-zA-Z0-9._-]{2,32}$/.test(String(username).trim())) return res.status(400).json({ error: 'Invalid username' });
   if (user.username === 'aledeaux' && username !== undefined && String(username).trim() !== 'aledeaux') return res.status(400).json({ error: 'The primary superuser username cannot be changed' });
   if (username !== undefined && users.some(candidate => candidate.id !== user.id && candidate.username.toLowerCase() === String(username).trim().toLowerCase())) return res.status(409).json({ error: 'Username already exists' });
   if (password !== undefined && String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
   if (role !== undefined && !['user', 'superuser'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+  if (active !== undefined) {
+    if (typeof active !== 'boolean') return res.status(400).json({ error: 'Invalid active value' });
+    if (active === false && user.username === 'aledeaux') return res.status(400).json({ error: 'The primary superuser cannot be deactivated' });
+    if (active === false && user.id === req.user.id) return res.status(400).json({ error: 'You cannot deactivate your own account' });
+  }
   if (username !== undefined) user.username = String(username).trim();
   if (password !== undefined && password !== '') user.passwordHash = hashPassword(password);
   if (role !== undefined) user.role = role;
+  if (active !== undefined) user.active = active;
   saveUsers(users);
-  recordActivity('user-updated', req.user.username, user.username);
+  if (active === false) {
+    for (const [token, session] of sessions) if (session.id === user.id) sessions.delete(token);
+    recordActivity('user-deactivated', req.user.username, user.username);
+  } else if (active === true) {
+    recordActivity('user-activated', req.user.username, user.username);
+  } else {
+    recordActivity('user-updated', req.user.username, user.username);
+  }
   res.json({ user: publicUser(user) });
 });
 
@@ -344,6 +366,64 @@ app.post('/api/system/reset', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'System reset failed: ' + e.message });
   }
+});
+
+/* ---------------- chat ---------------- */
+/* Direct messages between users, stored as one flat JSON list under        */
+/* ./data/chat.json — each message tagged with a sorted "conversation" key  */
+/* so a pair of usernames always maps to the same thread regardless of who  */
+/* sent the most recent message.                                            */
+
+function readChat() {
+  try { return JSON.parse(fs.readFileSync(CHAT_FILE, 'utf8')); } catch (e) { return []; }
+}
+
+function saveChat(messages) {
+  fs.writeFileSync(CHAT_FILE, JSON.stringify(messages.slice(-5000), null, 2) + '\n');
+}
+
+function conversationKey(a, b) {
+  return [a, b].sort().join('::');
+}
+
+app.get('/api/chat/contacts', requireAuth, (req, res) => {
+  const contacts = loadUsers()
+    .filter(user => user.id !== req.user.id)
+    .map(user => ({ id: user.id, username: user.username, active: user.active !== false }));
+  res.json({ contacts });
+});
+
+app.get('/api/chat/messages', requireAuth, (req, res) => {
+  const other = loadUsers().find(user => user.username === String(req.query.with || ''));
+  if (!other) return res.status(404).json({ error: 'User not found' });
+  const key = conversationKey(req.user.username, other.username);
+  let messages = readChat().filter(message => message.conversation === key);
+  if (req.query.since) messages = messages.filter(message => message.at > String(req.query.since));
+  res.json({ messages: messages.slice(-200) });
+});
+
+app.post('/api/chat/messages', requireAuth, (req, res) => {
+  const { to, text } = req.body || {};
+  const recipient = loadUsers().find(user => user.username === String(to || ''));
+  if (!recipient) return res.status(404).json({ error: 'User not found' });
+  if (recipient.id === req.user.id) return res.status(400).json({ error: "You can't message yourself" });
+  if (recipient.active === false) return res.status(400).json({ error: 'That user is deactivated' });
+  const cleanText = String(text || '').trim();
+  if (!cleanText) return res.status(400).json({ error: 'Message is empty' });
+  if (cleanText.length > 4000) return res.status(400).json({ error: 'Message is too long' });
+  const message = {
+    id: crypto.randomUUID(),
+    conversation: conversationKey(req.user.username, recipient.username),
+    from: req.user.username,
+    to: recipient.username,
+    text: cleanText,
+    at: new Date().toISOString()
+  };
+  const messages = readChat();
+  messages.push(message);
+  saveChat(messages);
+  recordActivity('chat-message', req.user.username, 'to ' + recipient.username);
+  res.status(201).json({ message });
 });
 
 /* ---------------- real filesystem API ---------------- */

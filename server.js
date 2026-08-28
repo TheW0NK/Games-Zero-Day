@@ -53,6 +53,7 @@ function defaultTree() {
       Projects: { type: 'folder', children: { 'notes.txt': { type: 'file', content: 'Project notes go here.\n' } } },
       Assets: { type: 'folder', children: {} },
       Backups: { type: 'folder', children: {} },
+      'Recycle Bin': { type: 'folder', children: {} },
       userfiles: { type: 'folder', children: {} }
     }
   };
@@ -76,9 +77,10 @@ function ensureDirs() {
       if (entry !== 'aledeaux') fs.renameSync(path.join(USERFILES_DIR, entry), path.join(primaryHome, entry));
     }
   }
-  // back-fill a Music folder for any user home that predates it
+  // back-fill folders for any user home that predates them
   for (const user of loadUsers()) {
     fs.mkdirSync(path.join(userHome(user), 'Music'), { recursive: true });
+    fs.mkdirSync(path.join(userHome(user), 'Recycle Bin'), { recursive: true });
   }
 }
 
@@ -225,7 +227,14 @@ function writeTreeToDisk(node, dirPath) {
 
 ensureDirs();
 
-app.use(express.json({ limit: '20mb' }));
+// /proxy forwards requests (including POST bodies of any content-type) to
+// arbitrary upstream sites, so it needs the raw, unparsed body rather than
+// JSON-only parsing — give it its own body handling and keep the global
+// JSON parser for everything else.
+app.use((req, res, next) => {
+  if (req.path === '/proxy') return next();
+  express.json({ limit: '20mb' })(req, res, next);
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------------- authentication and user management ---------------- */
@@ -458,6 +467,49 @@ app.get('/api/fs/download', requireAuth, (req, res) => {
   res.sendFile(target);
 });
 
+function resolveEntryPath(user, dirArray, name) {
+  const relativeDirectory = (Array.isArray(dirArray) ? dirArray : []).slice(0, 20).map(safeName).filter(Boolean);
+  const cleanName = safeName(String(name || '').trim());
+  if (!cleanName) return null;
+  return { dir: path.join(userHome(user), ...relativeDirectory), name: cleanName, full: path.join(userHome(user), ...relativeDirectory, cleanName) };
+}
+
+// Real move/rename on disk — the whole-tree PUT to /api/fs/tree can't safely
+// relocate a binary file (mp3, image, …) since it never carries real bytes,
+// only a placeholder; a plain tree edit would delete the old copy and create
+// an empty file at the new path. Drag-and-drop, cut/paste, rename, and the
+// Recycle Bin all route binary moves through here instead.
+app.post('/api/fs/move', requireAuth, (req, res) => {
+  const { fromDir, fromName, toDir, toName } = req.body || {};
+  const source = resolveEntryPath(req.user, fromDir, fromName);
+  const dest = resolveEntryPath(req.user, toDir, toName || fromName);
+  if (!source || !dest) return res.status(400).json({ error: 'Missing file name' });
+  if (!fs.existsSync(source.full)) return res.status(404).json({ error: 'Source not found' });
+  try {
+    fs.mkdirSync(dest.dir, { recursive: true });
+    fs.renameSync(source.full, dest.full);
+    recordActivity('file-move', req.user.username, source.name + ' -> ' + dest.name);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Move failed: ' + e.message }); }
+});
+
+// Real byte-for-byte duplicate on disk, for the same reason /api/fs/move
+// exists — copying a binary node through the tree would just create an
+// empty file at the destination.
+app.post('/api/fs/copy', requireAuth, (req, res) => {
+  const { fromDir, fromName, toDir, toName } = req.body || {};
+  const source = resolveEntryPath(req.user, fromDir, fromName);
+  const dest = resolveEntryPath(req.user, toDir, toName || fromName);
+  if (!source || !dest) return res.status(400).json({ error: 'Missing file name' });
+  if (!fs.existsSync(source.full)) return res.status(404).json({ error: 'Source not found' });
+  try {
+    fs.mkdirSync(dest.dir, { recursive: true });
+    fs.copyFileSync(source.full, dest.full);
+    recordActivity('file-copy', req.user.username, source.name + ' -> ' + dest.name);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Copy failed: ' + e.message }); }
+});
+
 app.get('/api/system/status', requireAuth, (req, res) => {
   const memory = process.memoryUsage();
   res.json({
@@ -534,17 +586,92 @@ app.delete('/api/kv/:key', (req, res) => {
 /* Fetches the target server-side and serves it back same-origin, which is     */
 /* what actually gets around X-Frame-Options — the browser only ever checks    */
 /* headers on the response it received (ours), not the original site's.       */
-/* An injected <base> tag makes relative-path CSS/JS/images resolve against    */
-/* the real site and load directly from it, not through this proxy.            */
+/*                                                                              */
+/* A plain <base> tag (the original approach) is enough for *static* assets —  */
+/* images, CSS, plain <script src> — to resolve and load straight from the     */
+/* real site. It is not enough to keep browsing inside the proxy: clicking a   */
+/* link or submitting a form would navigate straight to the real site (hitting */
+/* its X-Frame-Options again), and any fetch()/XHR the page makes would be a   */
+/* genuine cross-origin request the target's CORS policy almost never allows.  */
+/* So on top of the <base> tag this rewrites navigation-causing attributes     */
+/* (<a href>, <form action>, <iframe src>, <area href>) to route back through  */
+/* /proxy, and injects a small shim that redirects the page's own fetch/XHR    */
+/* calls through /proxy too — the same rewriting-proxy approach tools like     */
+/* Ultraviolet use, just hand-rolled and far simpler (no service worker, no    */
+/* WebSocket tunneling).                                                       */
 
-app.get('/proxy', requireAuth, async (req, res) => {
+function proxyAbsoluteUrl(url, base) {
+  try { return new URL(url, base).href; } catch (e) { return null; }
+}
+
+// A root-relative "/proxy?..." URL would itself resolve against the <base>
+// tag this response sets (needed so plain assets load from the real site),
+// landing back on the *target* site's origin instead of ours — so every
+// rewritten link/action needs to be a fully-qualified URL against our own
+// origin instead.
+function proxyUrlFor(absoluteUrl, ourOrigin) {
+  return ourOrigin + '/proxy?url=' + encodeURIComponent(absoluteUrl);
+}
+
+// Rewrites the attribute that causes *navigation* on a small set of tags, so
+// following it keeps the browser inside /proxy instead of jumping straight to
+// the real site (and straight into its X-Frame-Options).
+function rewriteNavigationAttr(html, tag, attr, baseUrl, ourOrigin) {
+  const re = new RegExp('(<' + tag + '\\b[^>]*?\\s' + attr + '\\s*=\\s*)(["\'])(.*?)\\2', 'gi');
+  return html.replace(re, (whole, pre, quote, url) => {
+    if (!url || /^(javascript:|mailto:|tel:|#|data:|blob:)/i.test(url)) return whole;
+    const abs = proxyAbsoluteUrl(url, baseUrl);
+    return abs ? pre + quote + proxyUrlFor(abs, ourOrigin) + quote : whole;
+  });
+}
+
+function buildProxyInjection(targetUrl) {
+  const baseHref = targetUrl.replace(/"/g, '&quot;');
+  const baseJson = JSON.stringify(targetUrl);
+  return '<base href="' + baseHref + '">\n' +
+    '<script>(function(){\n' +
+    '  var uvBase = ' + baseJson + ';\n' +
+    '  function resolve(u){ try { return new URL(u, uvBase).href; } catch(e){ return u; } }\n' +
+    '  function toProxy(u){\n' +
+    '    if(typeof u !== "string" || /^(javascript:|data:|blob:|mailto:|tel:|#)/i.test(u)) return u;\n' +
+    // location.origin (not a relative path) — a relative "/proxy?..." string
+    // would itself get resolved against the <base> tag above and end up
+    // pointed at the *target* site's origin instead of ours.
+    '    return location.origin + "/proxy?url=" + encodeURIComponent(resolve(u));\n' +
+    '  }\n' +
+    '  var origFetch = window.fetch;\n' +
+    '  if(origFetch){\n' +
+    '    window.fetch = function(input, init){\n' +
+    '      try{\n' +
+    '        if(typeof input === "string") input = toProxy(input);\n' +
+    '        else if(input && typeof input.url === "string") input = new Request(toProxy(input.url), input);\n' +
+    '      }catch(e){}\n' +
+    '      return origFetch.call(this, input, init);\n' +
+    '    };\n' +
+    '  }\n' +
+    '  var origOpen = XMLHttpRequest.prototype.open;\n' +
+    '  XMLHttpRequest.prototype.open = function(method, url){\n' +
+    '    try{ arguments[1] = toProxy(url); }catch(e){}\n' +
+    '    return origOpen.apply(this, arguments);\n' +
+    '  };\n' +
+    '})();</script>\n';
+}
+
+app.all('/proxy', requireAuth, express.raw({ type: () => true, limit: '20mb' }), async (req, res) => {
   const target = req.query.url;
   if (!target || !/^https?:\/\//i.test(String(target))) {
     return res.status(400).send('Missing or invalid "url" query parameter.');
   }
+  const method = req.method.toUpperCase();
+  const hasBody = !['GET', 'HEAD'].includes(method) && Buffer.isBuffer(req.body) && req.body.length > 0;
   try {
     const upstream = await fetch(target, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AegisOSProxy/1.0)' },
+      method,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AegisOSProxy/1.0)',
+        ...(req.headers['content-type'] ? { 'Content-Type': req.headers['content-type'] } : {})
+      },
+      body: hasBody ? req.body : undefined,
       redirect: 'follow'
     });
     const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
@@ -556,11 +683,19 @@ app.get('/proxy', requireAuth, async (req, res) => {
     // stripping those is the entire point of this route.
 
     if (contentType.includes('text/html')) {
+      const ourOrigin = req.protocol + '://' + req.get('host');
       let html = buffer.toString('utf-8');
-      const baseTag = '<base href="' + target.replace(/"/g, '&quot;') + '">';
+      html = rewriteNavigationAttr(html, 'a', 'href', target, ourOrigin);
+      html = rewriteNavigationAttr(html, 'area', 'href', target, ourOrigin);
+      html = rewriteNavigationAttr(html, 'iframe', 'src', target, ourOrigin);
+      // a <form> with no action submits to the current page — give it an
+      // explicit one first so the action-rewrite below has something to catch
+      html = html.replace(/<form(?![^>]*\baction\s*=)([^>]*)>/gi, (m, attrs) => '<form' + attrs + ' action="' + target.replace(/"/g, '&quot;') + '">');
+      html = rewriteNavigationAttr(html, 'form', 'action', target, ourOrigin);
+      const injection = buildProxyInjection(target);
       html = /<head[^>]*>/i.test(html)
-        ? html.replace(/<head[^>]*>/i, (m) => m + baseTag)
-        : baseTag + html;
+        ? html.replace(/<head[^>]*>/i, (m) => m + injection)
+        : injection + html;
       return res.send(html);
     }
     res.send(buffer);

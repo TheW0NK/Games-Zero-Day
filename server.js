@@ -212,6 +212,37 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
 
+function setupRequired() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(kvPath('needs_setup'), 'utf8'));
+    const value = saved && typeof saved === 'object' ? saved.value : saved;
+    return value !== 'false' && value !== false;
+  } catch (e) { return true; }
+}
+
+app.get('/api/setup/status', (req, res) => res.json({ needs_setup: setupRequired() }));
+
+app.post('/api/setup/complete', (req, res) => {
+  if (!setupRequired()) return res.status(409).json({ error: 'System setup is already complete' });
+  const { username, password, timezone, telemetry, settings } = req.body || {};
+  const cleanName = String(username || '').trim();
+  if (!/^[a-zA-Z0-9._-]{2,32}$/.test(cleanName) || String(password || '').length < 6) return res.status(400).json({ error: 'Create an admin username and a password of at least 6 characters' });
+  const users = loadUsers();
+  const existing = users.find(user => user.username.toLowerCase() === cleanName.toLowerCase());
+  if (existing) {
+    existing.username = cleanName;
+    existing.passwordHash = hashPassword(password);
+    existing.role = 'superuser';
+  } else {
+    users.push({ id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role: 'superuser', createdAt: new Date().toISOString() });
+  }
+  saveUsers(users);
+  fs.writeFileSync(kvPath('needs_setup'), 'false');
+  fs.writeFileSync(kvPath('system-setup'), JSON.stringify({ timezone: timezone || 'UTC', telemetry: telemetry !== false, settings: settings || {} }));
+  recordActivity('system-setup', cleanName, 'initial installation complete');
+  res.json({ ok: true });
+});
+
 app.put('/api/auth/profile', requireAuth, (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   if (!passwordMatches(currentPassword, loadUsers().find(user => user.id === req.user.id)?.passwordHash)) return res.status(401).json({ error: 'Current password is incorrect' });

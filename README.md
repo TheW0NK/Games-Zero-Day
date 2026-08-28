@@ -60,6 +60,13 @@ Then open http://localhost:3000
   document, spreadsheet, and HTML app authoring workflows.
 - **Music Player** includes a curated playlist of hosted SoundHelix sample
   recordings plus the existing synthesizer tracks.
+- **System setup** runs in its own full-screen layer after POST and before the
+  loading bar when `needs_setup` is true. It covers installation, date/time,
+  telemetry, administrator creation, and final preferences. Completing setup
+  persists the flag as false; a system reset removes it and shows setup again.
+- **BIOS setup** is available only by pressing a key during the textual POST
+  screen. Recovery also includes non-destructive diagnostics and boot-log
+  viewing.
 - `userfiles/` and `data/` are gitignored on purpose, so a fresh clone/rebuild
   always starts from the clean default tree rather than committing your demo
   files to source control.

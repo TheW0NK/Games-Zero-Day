@@ -42,6 +42,8 @@
     transition: filter .25s ease, background .25s ease;
     flex-shrink:0;
   }
+  .screen.system-loading{ cursor:none; }
+  .screen.system-loading *{ cursor:none !important; }
 
   .layer{ position:absolute; inset:0; display:none; }
   .layer.active{ display:flex; }
@@ -52,6 +54,36 @@
     position:absolute; width:900px; height:900px; border-radius:50%;
     filter: blur(120px); opacity:0.16; animation: drift 24s ease-in-out infinite alternate;
   }
+    #layer-setup{ background:radial-gradient(circle at 72% 12%,#172844 0,#080b14 52%,#05060b 100%); align-items:center; justify-content:center; overflow:auto; }
+    #layer-installation{ background:radial-gradient(circle at 50% 35%,#142538 0,#070a12 68%,#040509 100%); flex-direction:column; align-items:center; justify-content:center; gap:18px; }
+    .installation-mark{ display:flex; align-items:center; gap:12px; color:var(--ink); font:500 24px 'Space Grotesk',sans-serif; letter-spacing:1px; }
+    .installation-mark .setup-glyph{ animation:spin 2.4s linear infinite; }
+    .installation-copy{ color:var(--ink-dim); font:12px 'JetBrains Mono',monospace; min-height:18px; }
+    .installation-progress{ width:min(440px,72vw); height:4px; background:rgba(255,255,255,.1); border-radius:3px; overflow:hidden; }
+    .installation-progress div{ width:0; height:100%; background:linear-gradient(90deg,var(--accent),#5a7fe0); transition:width .12s linear; }
+    .setup-frame{ width:min(760px,92vw); min-height:540px; margin:40px 0; display:flex; flex-direction:column; background:rgba(14,19,32,.94); border:1px solid rgba(125,216,200,.24); border-radius:12px; box-shadow:0 30px 90px rgba(0,0,0,.6); overflow:hidden; }
+    .setup-brand{ display:flex; align-items:center; gap:12px; padding:22px 28px 18px; border-bottom:1px solid var(--panel-border); }
+    .setup-glyph{ width:34px; height:34px; display:grid; place-items:center; border-radius:9px; background:linear-gradient(135deg,var(--accent),#5a7fe0); color:#07100f; font:600 18px 'Space Grotesk',sans-serif; }
+    .setup-kicker,.setup-component-label{ color:var(--accent); font:500 10px 'JetBrains Mono',monospace; letter-spacing:1.2px; }
+    .setup-title{ color:var(--ink); font:500 19px 'Space Grotesk',sans-serif; margin-top:3px; }
+    .setup-step{ margin-left:auto; color:var(--ink-dim); font:11px 'JetBrains Mono',monospace; }
+    .setup-progress{ height:3px; background:rgba(255,255,255,.08); }
+    .setup-progress div{ height:100%; width:20%; background:var(--accent); transition:width .25s ease; }
+    .setup-scroll{ flex:1; padding:38px 54px; }
+    .setup-component{ display:none; max-width:590px; animation:setupIn .25s ease; }
+    .setup-component.active{ display:block; }
+    .setup-component h1{ font:500 29px 'Space Grotesk',sans-serif; margin:10px 0 8px; }
+    .setup-component p{ color:var(--ink-dim); font-size:13px; line-height:1.6; margin-bottom:24px; }
+    .setup-fields{ display:flex; flex-direction:column; gap:13px; }
+    .setup-fields label{ display:flex; flex-direction:column; gap:6px; color:var(--ink-dim); font-size:11px; }
+    .setup-fields input,.setup-fields select{ background:rgba(255,255,255,.06); border:1px solid var(--panel-border); border-radius:7px; color:var(--ink); padding:10px 11px; font:12px 'Inter',sans-serif; outline:none; }
+    .setup-fields input:focus,.setup-fields select:focus{ border-color:var(--accent-soft); }
+    .setup-component .setup-option{ margin-bottom:10px; }
+    .setup-error{ min-height:18px; margin-top:10px; color:var(--danger); font-size:11px; }
+    .setup-footer{ display:flex; align-items:center; gap:12px; padding:16px 28px; border-top:1px solid var(--panel-border); }
+    .setup-footer-status{ flex:1; color:var(--ink-dim); font-size:11px; text-align:center; }
+    @keyframes setupIn{ from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:translateY(0); } }
+    @media (max-width:620px){ .setup-frame{ width:100vw; min-height:100vh; margin:0; border-radius:0; } .setup-scroll{ padding:30px 25px; } .setup-component h1{ font-size:25px; } }
   .bg-aurora span:nth-child(1){ background:#7dd8c8; top:-260px; left:-200px; }
   .bg-aurora span:nth-child(2){ background:#5a7fe0; bottom:-320px; right:-260px; width:1050px; height:1050px; animation-delay:-8s; }
   .bg-aurora span:nth-child(3){ background:#b98cf0; top:320px; right:260px; width:620px; height:620px; opacity:0.10; animation-delay:-14s; }
@@ -635,6 +667,13 @@
         </div>
       </div>
 
+      <!-- ============ INSTALLATION ============ -->
+      <div class="layer" id="layer-installation">
+        <div class="installation-mark"><div class="setup-glyph">A</div><span>Installing Aegis OS</span></div>
+        <div class="installation-progress"><div id="installationFill"></div></div>
+        <div class="installation-copy" id="installationStatus">Preparing installation media…</div>
+      </div>
+
       <!-- ============ LOCK ============ -->
       <div class="layer" id="layer-lock">
         <div class="bg-aurora"><span></span><span></span><span></span></div>
@@ -646,7 +685,7 @@
           <div class="lock-identity">
             <div class="avatar">A</div>
             <div class="lock-username">Welcome back</div>
-            <input class="lock-user-input" type="text" id="usernameInput" placeholder="Username" autocomplete="username" value="aledeaux" />
+            <input class="lock-user-input" type="text" id="usernameInput" placeholder="Username" autocomplete="username" />
             <div class="unlock-row">
               <input type="password" id="pwInput" placeholder="Password" autocomplete="current-password" />
               <button class="go-btn" id="goBtn" aria-label="Unlock">
@@ -1173,6 +1212,10 @@
               <div class="rv-ico">⚙</div>
               <div class="rv-lbl">Bootup Settings</div>
             </div>
+            <div class="rv-tile" onclick="openApp('recoverytools')">
+              <div class="rv-ico">◈</div>
+              <div class="rv-lbl">Diagnostics</div>
+            </div>
             <div class="rv-tile" onclick="openApp('test')">
               <div class="rv-ico">🧪</div>
               <div class="rv-lbl">System Test Functions</div>
@@ -1279,6 +1322,47 @@
             <div class="crash-qr"></div>
           </div>
       <!-- ============ TOP-LEVEL WINDOWS & OVERLAYS (usable from any layer: desktop, boot, recovery) ============ -->
+
+      <!-- BIOS SETUP WINDOW (POST-only entry) -->
+      <div class="window" id="win-bios" style="left:350px; top:95px; width:600px; height:440px;">
+        <div class="win-titlebar" onmousedown="startDrag(event,'win-bios')">
+          <div class="win-title">▣ Aegis Firmware Setup</div><div class="win-controls"><button class="win-btn close" onclick="closeBiosSetup()"></button></div>
+        </div>
+        <div class="win-body"><div class="recovery-tools"><h2>Firmware Setup Utility</h2><div class="setup-intro">POST is paused. Review firmware information before continuing startup.</div>
+          <div class="recovery-check"><span>Firmware version</span><span class="result">Aegis Boot Firmware 1.0</span></div>
+          <div class="recovery-check"><span>Primary boot device</span><span class="result">AEGIS-SSD-512</span></div>
+          <div class="recovery-check"><span>Memory installed</span><span class="result">16384 MB</span></div>
+          <div class="recovery-check"><span>Boot mode</span><span class="result">UEFI compatible</span></div>
+          <button class="mini-btn" style="margin-top:18px;" onclick="closeBiosSetup()">Continue startup</button>
+        </div></div>
+      </div>
+
+      <!-- FIRST-RUN SETUP LAYER -->
+      <div class="layer" id="layer-setup">
+        <div class="setup-frame">
+          <div class="setup-brand"><div class="setup-glyph">A</div><div><div class="setup-kicker">AEGIS SYSTEMS</div><div class="setup-title">System setup</div></div><div class="setup-step" id="setupStepLabel">1 of 5</div></div>
+          <div class="setup-progress"><div id="setupProgressFill"></div></div>
+          <div class="setup-scroll">
+            <section class="setup-component active" data-setup-step="0"><div class="setup-component-label">01 / Installation</div><h1>Install Aegis OS</h1><p>Prepare this device with a few installation choices before the first boot.</p><div class="setup-fields"><label>Device name<input id="setupDeviceName" value="Aegis-Workstation" maxlength="32"></label><label>Language<select id="setupLanguage"><option>English (United States)</option><option>English (United Kingdom)</option><option>Deutsch</option><option>Francais</option></select></label><label>Installation target<select id="setupTarget"><option>AEGIS-SSD-512 · 512 GB</option><option>Virtual disk · 64 GB</option></select></label></div></section>
+            <section class="setup-component" data-setup-step="1"><div class="setup-component-label">02 / Date and time</div><h1>Set date and time</h1><p>Choose how this installation should display local time.</p><div class="setup-fields"><label>Time zone<select id="setupTimezone"></select></label><div class="setup-option"><div><div class="lab">24-hour clock</div><div class="sub">Display time as 14:30 instead of 2:30 PM</div></div><div class="toggle on" id="setup24Hour" onclick="this.classList.toggle('on')"></div></div></div></section>
+            <section class="setup-component" data-setup-step="2"><div class="setup-component-label">03 / Telemetry</div><h1>Choose your privacy settings</h1><p>These choices control local diagnostic information collected by the simulation.</p><div class="setup-option"><div><div class="lab">Local diagnostics</div><div class="sub">Keep activity and troubleshooting logs on this device</div></div><div class="toggle on" id="setupDiagnosticsToggle" onclick="this.classList.toggle('on')"></div></div><div class="setup-option"><div><div class="lab">Usage telemetry</div><div class="sub">Allow simulated system usage statistics</div></div><div class="toggle" id="setupTelemetryToggle" onclick="this.classList.toggle('on')"></div></div></section>
+            <section class="setup-component" data-setup-step="3"><div class="setup-component-label">04 / Administrator</div><h1>Create an administrator</h1><p>This account controls users, recovery, and system reset. Keep these credentials somewhere safe.</p><div class="setup-fields"><label>Administrator username<input id="setupAdminUsername" autocomplete="username" required></label><label>Password<input id="setupAdminPassword" type="password" autocomplete="new-password" required></label><label>Confirm password<input id="setupAdminConfirm" type="password" autocomplete="new-password" required></label></div><div class="setup-error" id="setupError"></div></section>
+            <section class="setup-component" data-setup-step="4"><div class="setup-component-label">05 / Finish</div><h1>Personalize your system</h1><p>A few final defaults are ready. You can change them later in Settings.</p><div class="setup-option"><div><div class="lab">System sounds</div><div class="sub">Enable startup and notification sounds</div></div><div class="toggle on" id="setupSoundToggle" onclick="this.classList.toggle('on')"></div></div><div class="setup-option"><div><div class="lab">Dark appearance</div><div class="sub">Use the default Aegis dark theme</div></div><div class="toggle on" id="setupDarkToggle" onclick="this.classList.toggle('on')"></div></div></section>
+          </div>
+          <div class="setup-footer"><button class="mini-btn" id="setupBackBtn" onclick="setupBack()" style="visibility:hidden;">Back</button><div class="setup-footer-status" id="setupFooterStatus">Installation choices</div><button class="mini-btn" id="setupNextBtn" onclick="setupNext()">Continue</button></div>
+        </div>
+      </div>
+
+      <!-- RECOVERY TOOLKIT WINDOW -->
+      <div class="window" id="win-recoverytools" style="left:520px; top:90px; width:520px; height:430px;">
+        <div class="win-titlebar" onmousedown="startDrag(event,'win-recoverytools')"><div class="win-title">◈ Recovery Diagnostics</div><div class="win-controls"><button class="win-btn close" onclick="closeApp('recoverytools')"></button></div></div>
+        <div class="win-body"><div class="recovery-tools"><h2>Recovery diagnostics</h2><div class="setup-intro">Run non-destructive checks before attempting a repair or normal boot.</div>
+          <div class="recovery-check"><span>System files</span><span class="result" id="recoverySystemResult">Not checked</span><button class="mini-btn" onclick="runRecoveryCheck('recoverySystemResult')">Check</button></div>
+          <div class="recovery-check"><span>User homes</span><span class="result" id="recoveryHomesResult">Not checked</span><button class="mini-btn" onclick="runRecoveryCheck('recoveryHomesResult')">Check</button></div>
+          <div class="recovery-check"><span>Network services</span><span class="result" id="recoveryNetworkResult">Not checked</span><button class="mini-btn" onclick="runRecoveryCheck('recoveryNetworkResult')">Check</button></div>
+          <div class="recovery-check"><span>Boot log</span><button class="mini-btn" onclick="showBootLog()">View log</button></div>
+        </div></div>
+      </div>
 
       <!-- STARTUP SETTINGS WINDOW -->
       <div class="window" id="win-startupSettings" style="left:480px; top:110px; width:580px; height:460px;">
@@ -1492,11 +1576,15 @@
   function setLayer(id){
     document.querySelectorAll('.layer').forEach(l => l.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    document.getElementById('screen').classList.toggle('system-loading', id === 'layer-boot' || id === 'layer-installation');
   }
 
   /* ---- BOOT (slow, stuttering — this thing has seen better days) ---- */
   let bootPaused = false;
   let bootStep = null;
+  let postPaused = false;
+  let postStep = null;
+  let postTimer = null;
 
   const postLinesText = [
     'Aegis BIOS (C) Aegis Systems — Firmware v1.0.0',
@@ -1519,12 +1607,14 @@
     linesEl.innerHTML = '';
     let i = 0;
     function next(){
+      if(postPaused) return;
       if(i >= postLinesText.length){
         setTimeout(() => {
           post.style.display = 'none';
           main.style.display = 'flex';
           playSfx('bootChime');
-          callback();
+          if(needsSetup) openSystemSetup();
+          else callback();
         }, 300);
         return;
       }
@@ -1534,14 +1624,17 @@
       linesEl.appendChild(d);
       if(isOk) playSfx('postBeep');
       i++;
-      setTimeout(next, 90 + Math.random() * 110);
+      postStep = next;
+      postTimer = setTimeout(next, 90 + Math.random() * 110);
     }
+    postStep = next;
     next();
   }
 
   function runBoot(){
     setLayer('layer-boot');
     bootPaused = false;
+    postPaused = false;
     resetBootKeyDots();
     runPostSequence(runBootProgress);
   }
@@ -1576,7 +1669,7 @@
       // the 78-93% band is a deliberate stall — every budget laptop has one
       const inStall = pct >= 78 && pct < 93;
       const inc = inStall ? (Math.random() * 1.1 + 0.2) : (Math.random() * 3.5 + 0.8);
-      const delay = inStall ? (Math.random() * 650 + 450) : (Math.random() * 220 + 120);
+      const delay = inStall ? (Math.random() * 650 + 200) : (Math.random() * 220 + 120);
 
       pct = Math.min(100, pct + inc);
       fill.style.width = pct + '%';
@@ -1644,6 +1737,7 @@
       setLayer('layer-desktop');
       deskTopEnteredAt = Date.now();
       resetIdleTimer();
+      if(needsSetup) setTimeout(openSystemSetup, 120);
     }, 750);
   }
   function lockNow(){ playSfx('lock'); setLayer('layer-lock'); }
@@ -1900,7 +1994,7 @@
     settings:{label:'Settings', icon:'⚙'}, browser:{label:'Browser', icon:'🌐'}, files:{label:'Files', icon:'📁'},
     terminal:{label:'Terminal', icon:'⌥'}, test:{label:'Test Functions', icon:'🧪'},
     startupSettings:{label:'Startup Settings', icon:'🛡'}, poweractions:{label:'Power Actions', icon:'⏻'},
-    versioncontrol:{label:'Version Control', icon:'⧉'}, systemwipe:{label:'System Wipe', icon:'⨯'},
+    versioncontrol:{label:'Version Control', icon:'⧉'}, systemwipe:{label:'System Wipe', icon:'⨯'}, bios:{label:'Firmware Setup', icon:'▣'}, setup:{label:'Aegis OS Setup', icon:'✦'}, recoverytools:{label:'Recovery Diagnostics', icon:'◈'},
     texteditor:{label:'Text Editor', icon:'📝'}, calculator:{label:'Calculator', icon:'🧮'},
     photos:{label:'Photo Viewer', icon:'🖼️'}, appstore:{label:'App Store', icon:'▦'}, ide:{label:'Aegis IDE', icon:'</>'}, writer:{label:'Writer', icon:'▤'}, sheets:{label:'Sheets', icon:'▦'}, camera:{label:'Camera', icon:'◎'}, monitor:{label:'System Monitor', icon:'▥'}, music:{label:'Music Player', icon:'🎵'},
     snake:{label:'Snake', icon:'🐍'}, g2048:{label:'2048', icon:'🔢'}
@@ -2063,7 +2157,8 @@
     const ov = document.getElementById('transitionOverlay');
     document.getElementById('transitionText').textContent = text;
     ov.classList.add('show');
-    setTimeout(() => { ov.classList.remove('show'); if(after) after(); }, duration);
+    document.getElementById('screen').classList.add('system-loading');
+    setTimeout(() => { ov.classList.remove('show'); document.getElementById('screen').classList.remove('system-loading'); if(after) after(); }, duration);
   }
   function restartNow(){
     playSfx('restart');
@@ -2132,7 +2227,11 @@
 
   document.addEventListener('keydown', (e) => {
     if(!document.getElementById('layer-boot').classList.contains('active')) return;
-    if(document.getElementById('bootMainContent').style.display === 'none') return; // still in POST — key hint isn't shown yet
+    if(document.getElementById('bootMainContent').style.display === 'none'){
+      if(!document.getElementById('win-bios').classList.contains('open')) openBiosSetup();
+      e.preventDefault();
+      return;
+    }
     if(document.getElementById('win-startupSettings').classList.contains('open')) return; // already open
     bootKeyCount++;
     clearTimeout(bootKeyResetTimer);
@@ -2145,18 +2244,93 @@
     }
   });
 
+  function openBiosSetup(){
+    postPaused = true;
+    clearTimeout(postTimer);
+    document.getElementById('screen').classList.remove('system-loading');
+    openApp('bios');
+  }
+  function closeBiosSetup(){
+    closeApp('bios');
+    postPaused = false;
+    document.getElementById('screen').classList.add('system-loading');
+    if(postStep) postStep();
+  }
+
   function openStartupSettings(){
     pauseBootForSettings();
+    document.getElementById('screen').classList.remove('system-loading');
     openApp('startupSettings');
     showStartupPane('startup');
   }
   function closeStartupSettings(){
     closeApp('startupSettings');
+    if(document.getElementById('layer-boot').classList.contains('active')) document.getElementById('screen').classList.add('system-loading');
     resumeBootFromSettings();
   }
   function showStartupPane(name){
     document.querySelectorAll('.ss-nav .item').forEach(i => i.classList.toggle('active', i.dataset.pane === name));
     document.querySelectorAll('.ss-pane').forEach(p => p.classList.toggle('active', p.id === 'ss-pane-' + name));
+  }
+
+  function openSystemSetup(){
+    const timezone = document.getElementById('setupTimezone');
+    if(timezone && !timezone.options.length){
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      ['UTC', detected, 'America/New_York', 'Europe/London', 'Asia/Tokyo'].filter((zone, index, zones) => zones.indexOf(zone) === index).forEach(zone => timezone.add(new Option(zone, zone)));
+      timezone.value = detected;
+    }
+    document.getElementById('setupSoundToggle').classList.add('on');
+    document.getElementById('setupDiagnosticsToggle').classList.add('on');
+    setupStep = 0;
+    renderSetupStep();
+    setLayer('layer-setup');
+  }
+  let setupStep = 0;
+  function renderSetupStep(){
+    document.querySelectorAll('.setup-component').forEach((component, index) => component.classList.toggle('active', index === setupStep));
+    document.getElementById('setupStepLabel').textContent = (setupStep + 1) + ' of 5';
+    document.getElementById('setupProgressFill').style.width = ((setupStep + 1) * 20) + '%';
+    document.getElementById('setupBackBtn').style.visibility = setupStep ? 'visible' : 'hidden';
+    document.getElementById('setupNextBtn').textContent = setupStep === 4 ? 'Install and restart' : 'Continue';
+    document.getElementById('setupFooterStatus').textContent = ['Installation choices','Clock preferences','Privacy choices','Administrator account','Final preferences'][setupStep];
+  }
+  function setupBack(){ if(setupStep > 0){ setupStep--; renderSetupStep(); } }
+  function setupNext(){
+    const error = document.getElementById('setupError');
+    if(setupStep === 3){
+      const password = document.getElementById('setupAdminPassword').value;
+      if(!document.getElementById('setupAdminUsername').value.trim() || password.length < 6 || password !== document.getElementById('setupAdminConfirm').value){ error.textContent = 'Enter a username, a 6+ character password, and matching confirmation.'; return; }
+      error.textContent = '';
+    }
+    if(setupStep < 4){ setupStep++; renderSetupStep(); } else finishSystemSetup();
+  }
+  async function finishSystemSetup(){
+    const response = await fetch('/api/setup/complete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+      username:document.getElementById('setupAdminUsername').value.trim(), password:document.getElementById('setupAdminPassword').value,
+      timezone:document.getElementById('setupTimezone').value, telemetry:document.getElementById('setupTelemetryToggle').classList.contains('on'),
+      settings:{ deviceName:document.getElementById('setupDeviceName').value.trim(), language:document.getElementById('setupLanguage').value, target:document.getElementById('setupTarget').value, clock24:document.getElementById('setup24Hour').classList.contains('on'), diagnostics:document.getElementById('setupDiagnosticsToggle').classList.contains('on'), dark:document.getElementById('setupDarkToggle').classList.contains('on'), sounds:document.getElementById('setupSoundToggle').classList.contains('on') }
+    })}).catch(() => null);
+    if(!response || !response.ok){ document.getElementById('setupError').textContent = 'Setup could not be completed. Check that the server is running.'; setupStep = 3; renderSetupStep(); return; }
+    needsSetup = false;
+    soundEnabled = document.getElementById('setupSoundToggle').classList.contains('on');
+    runInstallationProgress();
+  }
+  function runInstallationProgress(){
+    setLayer('layer-installation');
+    const fill = document.getElementById('installationFill');
+    const status = document.getElementById('installationStatus');
+    const stages = [[0,'Preparing installation media…'],[18,'Partitioning virtual disk…'],[36,'Copying core system files…'],[58,'Installing device drivers…'],[76,'Configuring user environment…'],[91,'Finalizing installation…']];
+    let percent = 0;
+    const timer = setInterval(() => {
+      percent = Math.min(100, percent + 1);
+      fill.style.width = percent + '%';
+      for(let index = stages.length - 1; index >= 0; index--){ if(percent >= stages[index][0]){ status.textContent = stages[index][1] + ' ' + percent + '%'; break; } }
+      if(percent >= 100){
+        clearInterval(timer);
+        setTimeout(() => { fill.style.width = '0%'; runBoot(); }, 900);
+      }
+    }, 120);
   }
 
   /* ================= RECOVERY MODE ================= */
@@ -2172,6 +2346,16 @@
   function continueFromRecovery(){
     closeApp('poweractions');
     showTransition('Resuming normal startup…', 900, () => { runBoot(); });
+  }
+
+  function runRecoveryCheck(id){
+    const result = document.getElementById(id);
+    result.textContent = 'Checking…';
+    setTimeout(() => { result.textContent = 'Passed'; result.style.color = 'var(--accent)'; beep(700, 0.05); }, 700);
+  }
+  function showBootLog(){
+    openApp('terminal');
+    printLine(postLinesText.map(line => escapeHtml(line)).join('<br>') || 'No boot log available', '');
   }
 
   /* ---- Version Control (recovery) ---- */
@@ -2207,27 +2391,30 @@
     const fill = document.getElementById('wipeBarFill');
     const status = document.getElementById('wipeStatus');
     ov.classList.add('show');
+    document.getElementById('screen').classList.add('system-loading');
     playSfx('wipeStart');
-    const stages = ['Erasing user data…','Erasing settings and registry…','Reinstalling core system files…','Finishing up…'];
+    const stages = ['Erasing user data…','Erasing settings and registry…','Reinstalling core system files…','Rebuildig from image media...'];
     let p = 0, si = 0;
     status.textContent = stages[0] + ' 0%';
     const iv = setInterval(() => {
-      p += Math.floor(Math.random()*7) + 3;
+      p += Math.random() * 1.4 + 0.3;
       if(p >= 100){ p = 100; clearInterval(iv); }
       fill.style.width = p + '%';
       const nextStage = Math.min(stages.length - 1, Math.floor((p / 100) * stages.length));
       if(nextStage !== si) si = nextStage;
       status.textContent = stages[si] + ' ' + p + '%';
-    }, 260);
+    }, 600);
     setTimeout(() => {
       playSfx('wipeDone');
       ov.classList.remove('show');
+      document.getElementById('screen').classList.remove('system-loading');
       fill.style.width = '0%';
       document.getElementById('wipeConfirmInput').value = '';
       document.getElementById('wipeAdminUser').value = '';
       document.getElementById('wipeAdminPassword').value = '';
       document.getElementById('wipeError').textContent = '';
       document.getElementById('wipeConfirmBtn').disabled = true;
+      needsSetup = true;
       // reset in-memory state to factory defaults before rebooting
       document.getElementById('screen').classList.remove('light-theme', 'night-light');
       const tTheme = document.getElementById('toggle-theme'); if(tTheme) tTheme.classList.add('on');
@@ -2245,7 +2432,7 @@
       musicInited = false;
       renderFilesGrid();
       runBoot();
-    }, 4600);
+    }, 60000);
   }
   let soundEnabled = false, soundVolume = 0.6;
   let audioCtx = null;
@@ -3707,6 +3894,7 @@
 
   /* ================= PERSISTENCE (survives reload — this device only) ================= */
   let persistReady = false;
+  let needsSetup = true;
   let persistSaveTimer = null;
 
   function collectSettingsState(){
@@ -3768,6 +3956,12 @@
   }
 
   async function loadPersistedState(){
+    if(currentUser){
+      try{
+        const setupState = await window.storage.get('needs_setup', false);
+        needsSetup = !setupState || setupState.value !== 'false';
+      }catch(e){ needsSetup = true; }
+    }
     try{
       const res = await window.storage.get('aegis-settings', false);
       if(res && res.value) applyPersistedSettings(JSON.parse(res.value));
@@ -3788,6 +3982,13 @@
     updateStorageStatus();
   }
 
+  async function loadSetupStatus(){
+    try{
+      const response = await fetch('/api/setup/status');
+      if(response.ok) needsSetup = (await response.json()).needs_setup;
+    }catch(e){ needsSetup = true; }
+  }
+
   async function wipeAllPersistedState(){
     try{ await window.storage.delete('aegis-settings', false); }catch(e){}
     try{ await window.storage.delete('aegis-term-history', false); }catch(e){}
@@ -3796,7 +3997,7 @@
   }
 
   /* ---- INIT ---- */
-  loadPersistedState().finally(() => { renderFilesGrid(); photosRenderGrid(); runBoot(); });
+  loadSetupStatus().finally(() => loadPersistedState().finally(() => { renderFilesGrid(); photosRenderGrid(); runBoot(); }));
 </script>
 
 </body>

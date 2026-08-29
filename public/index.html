@@ -1289,6 +1289,10 @@
                   <div><div class="sec-level-label">Firewall level</div><div class="sec-level-amount" id="fwLevel">1/5</div></div>
                   <button class="files-tbtn" id="fwUpgradeBtn" onclick="fwUpgrade()">Upgrade</button>
                 </div>
+                <div class="sec-level-card">
+                  <div><div class="sec-level-label">Overall security</div><div class="sec-level-amount" id="fwSecurityPct">0%</div></div>
+                  <div style="font-size:10.5px; color:var(--ink-dim); max-width:150px; text-align:right;">Attackers get paid based on this — 0% means nothing to steal and no ransomware.</div>
+                </div>
                 <div class="bank-section-label">Ports &amp; defense modules ($150 each)</div>
                 <div id="fwPorts" style="display:flex; flex-direction:column; gap:6px;"></div>
                 <div class="bank-error" id="fwError"></div>
@@ -4296,6 +4300,7 @@
       const data = await res.json();
       const sec = data.security;
       document.getElementById('fwLevel').textContent = sec.firewall + '/5';
+      document.getElementById('fwSecurityPct').textContent = sec.securityPercent + '%';
       document.getElementById('fwUpgradeBtn').disabled = sec.firewall >= 5;
       document.getElementById('fwUpgradeBtn').textContent = sec.firewall >= 5 ? 'Maxed' : 'Upgrade';
       document.getElementById('fwPorts').innerHTML = sec.ports.map(p => {
@@ -4425,9 +4430,11 @@
       const data = await res.json();
       if(!res.ok){ printLine('scan: ' + (data.error || 'failed'), 'err'); return; }
       printLine('Scanning ' + escapeHtml(data.username) + '…<br>' +
-        '&nbsp;&nbsp;firewall: <span class="prompt">' + data.firewall + '</span>/5 &nbsp; antivirus: <span class="prompt">' + data.antivirus + '</span>/5<br>' +
+        '&nbsp;&nbsp;firewall: <span class="prompt">' + data.firewall + '</span>/5 &nbsp; antivirus: <span class="prompt">' + data.antivirus + '</span>/5 &nbsp; security: <span class="prompt">' + data.securityPercent + '%</span><br>' +
         '&nbsp;&nbsp;open ports: <span class="prompt">' + data.ports.join(', ') + '</span><br>' +
-        '&nbsp;&nbsp;(defense modules not shown — try <span class="prompt">deepscan</span>)');
+        (data.securityPercent === 0
+          ? '&nbsp;&nbsp;<span class="err">0% security — nothing to steal here, and ransomware won\'t take hold</span>'
+          : '&nbsp;&nbsp;(defense modules not shown — try <span class="prompt">deepscan</span>)'));
     }catch(e){ printLine('scan: could not reach the server', 'err'); }
   }
   async function termDeepScan(username){
@@ -4437,7 +4444,7 @@
       const data = await res.json();
       if(!res.ok){ printLine('deepscan: ' + (data.error || 'failed'), 'err'); return; }
       const rows = data.ports.map(p => p + ': ' + (data.modules[p] || '<span class="prompt">none</span>')).join('<br>&nbsp;&nbsp;');
-      printLine('Deep scan of ' + escapeHtml(data.username) + '…<br>&nbsp;&nbsp;' + rows);
+      printLine('Deep scan of ' + escapeHtml(data.username) + ' — security: <span class="prompt">' + data.securityPercent + '%</span><br>&nbsp;&nbsp;' + rows);
       bankLoad();
     }catch(e){ printLine('deepscan: could not reach the server', 'err'); }
   }
@@ -4498,7 +4505,7 @@
       const data = await res.json();
       if(!res.ok){ printLine('secstatus: ' + (data.error || 'failed'), 'err'); return; }
       const sec = data.security;
-      let out = 'firewall: <span class="prompt">' + sec.firewall + '</span>/5 &nbsp; antivirus: <span class="prompt">' + sec.antivirus + '</span>/5 &nbsp; balance: <span class="prompt">' + bankFormatMoney(sec.balance) + '</span>';
+      let out = 'firewall: <span class="prompt">' + sec.firewall + '</span>/5 &nbsp; antivirus: <span class="prompt">' + sec.antivirus + '</span>/5 &nbsp; security: <span class="prompt">' + sec.securityPercent + '%</span> &nbsp; balance: <span class="prompt">' + bankFormatMoney(sec.balance) + '</span>';
       out += '<br>ports: ' + sec.ports.map(p => p + (sec.modules[p] ? ' (' + sec.modules[p] + ')' : '')).join(', ');
       out += '<br>infections: ' + (sec.infections.length ? sec.infections.map(i => (i.malware ? i.malware.name : i.malwareId) + ' (by ' + escapeHtml(i.by) + ')').join(', ') : 'none');
       if(sec.ransom) out += '<br><span class="err">locked — ' + bankFormatMoney(sec.ransom.amount) + ' ransom from ' + escapeHtml(sec.ransom.by) + '</span>';
@@ -4798,6 +4805,7 @@
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">steal</span>, <span class="prompt">deploy &lt;malware&gt;</span>, <span class="prompt">avscan</span>, <span class="prompt">secstatus</span>, <span class="prompt">dossier &lt;user&gt;</span>, <span class="prompt">malware</span> — malware catalog<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;</span> ($150) — install your own defense module<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span> — smaller, general-purpose edge<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;steal/drain payouts scale with the target\'s security % (shown in scan/secstatus) — 0% security means nothing to steal and no ransomware<br>' +
           '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span><br>' +
           '&nbsp;&nbsp;<b>Superuser</b> — <span class="prompt">setbalance &lt;user&gt; &lt;amount&gt;</span> — also available from Settings &gt; Users &gt; Edit'
         );

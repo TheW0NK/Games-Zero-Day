@@ -102,7 +102,18 @@ Then open http://localhost:3000
   monitoring, or firewall weakening). `avscan` tries to clean your own
   infections; `secstatus` shows your own security profile, installed
   modules, and intrusion log. Every account's security profile lives
-  alongside its user record. The **Firewall** and **Antivirus** App Store
+  alongside its user record.
+  Payouts are gated by a **security percentage** (`securityPercent` in
+  `server.js`) — the equally-weighted average of firewall level, antivirus
+  level, and the fraction of your own ports carrying an installed module,
+  0-100. `steal` and drain-type malware scale their payout by this
+  percentage, and ransomware-type malware refuses to deploy at all against
+  a target sitting at exactly 0% — there's no money in farming an account
+  that hasn't invested anything, which is the intended incentive to leave
+  brand-new players alone and go after well-defended (presumably richer)
+  targets instead. It's shown in `scan`, `deepscan`, `secstatus`, and the
+  Firewall app.
+  The **Firewall** and **Antivirus** App Store
   apps are GUI front-ends for the same `/api/hack/*` endpoints (level
   upgrades, per-port modules, scanning) if you'd rather not use the
   Terminal for defense — attacking another player stays Terminal-only.

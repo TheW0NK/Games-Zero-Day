@@ -233,9 +233,26 @@ function recordSecurityLog(users, targetUser, entry) {
   saveUsers(users);
 }
 
+// A 0-100 score for how much a player has actually invested in their own
+// defense — firewall level, antivirus level, and the fraction of their own
+// open ports carrying an installed module, equally weighted. A completely
+// untouched account (level 1 everywhere, no modules) scores exactly 0.
+// Attack payouts scale with this so there's no money in farming players who
+// haven't invested anything, and ransomware can't be deployed on them at
+// all — the incentive is to go after well-defended, presumably richer
+// targets instead of the defenseless.
+function securityPercent(sec) {
+  const firewallPct = (sec.firewall - 1) / 4;
+  const antivirusPct = (sec.antivirus - 1) / 4;
+  const totalPorts = sec.ports.length || 1;
+  const installedModules = sec.ports.filter(p => sec.modules && sec.modules[p]).length;
+  const modulesPct = installedModules / totalPorts;
+  return Math.round(100 * (firewallPct + antivirusPct + modulesPct) / 3);
+}
+
 function publicSecurity(user, { includeSensitive } = {}) {
   const sec = user.security || defaultSecurity(user);
-  const base = { firewall: sec.firewall, antivirus: sec.antivirus, ports: sec.ports };
+  const base = { firewall: sec.firewall, antivirus: sec.antivirus, ports: sec.ports, securityPercent: securityPercent(sec) };
   if (!includeSensitive) return base;
   return {
     ...base,
@@ -979,6 +996,7 @@ app.get('/api/hack/deepscan/:username', requireAuth, (req, res) => {
     username: target.username,
     firewall: target.security.firewall,
     antivirus: target.security.antivirus,
+    securityPercent: securityPercent(target.security),
     ports: target.security.ports,
     modules: target.security.ports.reduce((acc, p) => { acc[p] = target.security.modules[p] || null; return acc; }, {})
   });
@@ -1050,7 +1068,7 @@ app.post('/api/hack/steal', requireAuth, (req, res) => {
   const target = requireActiveBreach(req, res, users);
   if (!target) return;
   const pct = 0.05 + Math.random() * 0.1;
-  const amount = Math.floor(target.balance * pct);
+  const amount = Math.floor(target.balance * pct * (securityPercent(target.security) / 100));
   target.balance -= amount;
   attacker.balance += amount;
   activeBreaches.delete(attacker.id);
@@ -1068,6 +1086,8 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   const attacker = users.find(candidate => candidate.id === req.user.id);
   const target = requireActiveBreach(req, res, users);
   if (!target) return;
+  const targetSecPct = securityPercent(target.security);
+  if (malware.mechanic === 'lockdown' && targetSecPct === 0) return res.status(400).json({ error: "This target hasn't invested in any security — there's nothing for ransomware to lock down" });
   if (attacker.balance < malware.cost) return res.status(400).json({ error: 'Not enough funds — ' + malware.name + ' costs $' + malware.cost });
   attacker.balance -= malware.cost;
   const infection = { id: crypto.randomUUID(), malwareId: malware.id, by: attacker.username, at: new Date().toISOString() };
@@ -1077,7 +1097,7 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   let resultNote = malware.name + ' installed.';
   if (malware.mechanic === 'drain') {
     const pct = 0.06 + Math.random() * (malware.tier * 0.1);
-    const amount = Math.floor(target.balance * Math.min(pct, 0.45));
+    const amount = Math.floor(target.balance * Math.min(pct, 0.45) * (targetSecPct / 100));
     target.balance -= amount;
     attacker.balance += amount;
     if (amount > 0) recordTransaction(target.username, attacker.username, amount, 'malware:' + malware.id);

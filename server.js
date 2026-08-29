@@ -135,6 +135,26 @@ function malwareById(id) {
 
 const PORT_CATALOG = [21, 22, 23, 25, 80, 443, 445, 3306, 3389, 8080];
 
+// The core skill game: three exploit approaches, three purchasable defense
+// modules, in a rock-paper-scissors triangle. A module beats one approach
+// and loses to another — there is deliberately no "safe" module and no
+// "always works" approach, so success comes from reading a target (or
+// paying for a deep scan) and picking the right counter, not from outspending
+// them on a single generic stat.
+const ATTACK_APPROACHES = ['bruteforce', 'stealth', 'injection'];
+const DEFENSE_MODULES = ['ratelimiter', 'sentinel', 'decoy'];
+// approach -> the module it beats
+const APPROACH_BEATS_MODULE = { bruteforce: 'decoy', stealth: 'ratelimiter', injection: 'sentinel' };
+// approach -> the module it loses to
+const APPROACH_LOSES_TO_MODULE = { bruteforce: 'ratelimiter', stealth: 'sentinel', injection: 'decoy' };
+const MODULE_COST = 150;
+const DEEPSCAN_COST = 75;
+const EXPLOIT_COST = 20;
+// Every roll, in either direction, stays inside this band — no purchase or
+// module combination ever pushes a matchup to a guaranteed win or loss.
+const MIN_CHANCE = 10, MAX_CHANCE = 90;
+function clampChance(n) { return Math.max(MIN_CHANCE, Math.min(MAX_CHANCE, Math.round(n))); }
+
 // Deterministic per-account "open ports" — stable across scans (so recon
 // actually means something) without needing to persist an RNG state.
 function mulberry32(seed) {
@@ -156,7 +176,7 @@ function defaultSecurity(user) {
   const pool = PORT_CATALOG.slice();
   const ports = [];
   while (ports.length < count && pool.length) ports.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
-  return { firewall: 1, antivirus: 1, ports: ports.sort((a, b) => a - b), infections: [], log: [], ransom: null };
+  return { firewall: 1, antivirus: 1, ports: ports.sort((a, b) => a - b), modules: {}, infections: [], log: [], ransom: null };
 }
 
 // Back-fills accounts created before the currency/security system existed
@@ -167,6 +187,7 @@ function ensureEconomyFields(users) {
   for (const user of users) {
     if (typeof user.balance !== 'number') { user.balance = STARTING_BALANCE; changed = true; }
     if (!user.security) { user.security = defaultSecurity(user); changed = true; }
+    if (user.security && !user.security.modules) { user.security.modules = {}; changed = true; }
   }
   if (changed) saveUsers(users);
   return users;
@@ -210,6 +231,7 @@ function publicSecurity(user, { includeSensitive } = {}) {
   if (!includeSensitive) return base;
   return {
     ...base,
+    modules: sec.modules || {},
     infections: (sec.infections || []).map(inf => ({ ...inf, malware: malwareById(inf.malwareId) })),
     log: (sec.log || []).slice().reverse(),
     ransom: sec.ransom || null,
@@ -660,33 +682,83 @@ app.post('/api/hack/antivirus/upgrade', requireAuth, (req, res) => {
   res.json({ antivirus: user.security.antivirus, balance: user.balance });
 });
 
+app.post('/api/hack/secure', requireAuth, (req, res) => {
+  const { port, module } = req.body || {};
+  const cleanPort = Number(port);
+  const users = ensureEconomyFields(loadUsers());
+  const user = users.find(candidate => candidate.id === req.user.id);
+  if (!user.security.ports.includes(cleanPort)) return res.status(400).json({ error: 'That port is not open on your system — see secstatus' });
+  if (!DEFENSE_MODULES.includes(module)) return res.status(400).json({ error: 'Unknown module — choose from ' + DEFENSE_MODULES.join(', ') });
+  if (user.balance < MODULE_COST) return res.status(400).json({ error: 'Not enough funds — installing a module costs $' + MODULE_COST });
+  user.balance -= MODULE_COST;
+  user.security.modules[cleanPort] = module;
+  saveUsers(users);
+  recordActivity('hack-secure', user.username, module + ' on port ' + cleanPort);
+  res.json({ modules: user.security.modules, balance: user.balance });
+});
+
+app.get('/api/hack/deepscan/:username', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const viewer = users.find(candidate => candidate.id === req.user.id);
+  const target = users.find(candidate => candidate.username === req.params.username && candidate.active !== false);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === viewer.id) return res.status(400).json({ error: "You can't deep-scan yourself — try secstatus" });
+  if (viewer.balance < DEEPSCAN_COST) return res.status(400).json({ error: 'Not enough funds — a deep scan costs $' + DEEPSCAN_COST });
+  viewer.balance -= DEEPSCAN_COST;
+  saveUsers(users);
+  res.json({
+    username: target.username,
+    firewall: target.security.firewall,
+    antivirus: target.security.antivirus,
+    ports: target.security.ports,
+    modules: target.security.ports.reduce((acc, p) => { acc[p] = target.security.modules[p] || null; return acc; }, {})
+  });
+});
+
 app.post('/api/hack/exploit', requireAuth, (req, res) => {
-  const { target: targetName } = req.body || {};
+  const { target: targetName, port, approach } = req.body || {};
+  const cleanPort = Number(port);
   const users = ensureEconomyFields(loadUsers());
   const attacker = users.find(candidate => candidate.id === req.user.id);
   const target = users.find(candidate => candidate.username === String(targetName || '') && candidate.active !== false);
   if (!target) return res.status(404).json({ error: 'User not found' });
   if (target.id === attacker.id) return res.status(400).json({ error: "You can't exploit yourself" });
+  if (!target.security.ports.includes(cleanPort)) return res.status(400).json({ error: 'That port is not open on the target — scan them first' });
+  if (!ATTACK_APPROACHES.includes(approach)) return res.status(400).json({ error: 'Choose an approach: ' + ATTACK_APPROACHES.join(', ') });
   const lastAttempt = exploitCooldowns.get(attacker.id) || 0;
-  if (Date.now() - lastAttempt < 3000) return res.status(429).json({ error: 'Give it a moment before trying again' });
+  if (Date.now() - lastAttempt < 5000) return res.status(429).json({ error: 'Give it a moment before trying again' });
+  if (attacker.balance < EXPLOIT_COST) return res.status(400).json({ error: 'Not enough funds — an exploit attempt costs $' + EXPLOIT_COST });
   exploitCooldowns.set(attacker.id, Date.now());
+  attacker.balance -= EXPLOIT_COST;
 
   const hasBackdoor = (target.security.infections || []).some(inf => {
     const malware = malwareById(inf.malwareId);
     return malware && malware.mechanic === 'backdoor' && inf.by === attacker.username;
   });
-  const chance = hasBackdoor ? 100 : Math.max(5, Math.min(95, 50 + (attacker.security.firewall - target.security.firewall) * 10));
+
+  let chance;
+  if (hasBackdoor) {
+    chance = MAX_CHANCE;
+  } else {
+    const module = target.security.modules[cleanPort];
+    let base;
+    if (!module) base = 50;
+    else if (APPROACH_BEATS_MODULE[approach] === module) base = 78;
+    else if (APPROACH_LOSES_TO_MODULE[approach] === module) base = 22;
+    else base = 50; // shouldn't happen with only 3 modules, but keep a sane fallback
+    chance = clampChance(base + (attacker.security.firewall - target.security.firewall) * 3);
+  }
   const success = Math.random() * 100 < chance;
 
   if (success) {
     activeBreaches.set(attacker.id, { target: target.username, expiresAt: Date.now() + 120000 });
     recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-success' });
     recordActivity('hack-exploit-success', attacker.username, 'vs ' + target.username);
-    return res.json({ success: true, chance, breachExpiresIn: 120 });
+    return res.json({ success: true, chance, breachExpiresIn: 120, balance: attacker.balance });
   }
   recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-failed' });
   recordActivity('hack-exploit-failed', attacker.username, 'vs ' + target.username);
-  res.json({ success: false, chance });
+  res.json({ success: false, chance, balance: attacker.balance });
 });
 
 function requireActiveBreach(req, res, users) {

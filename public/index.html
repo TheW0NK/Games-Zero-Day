@@ -4024,17 +4024,40 @@
       if(!res.ok){ printLine('scan: ' + (data.error || 'failed'), 'err'); return; }
       printLine('Scanning ' + escapeHtml(data.username) + '…<br>' +
         '&nbsp;&nbsp;firewall: <span class="prompt">' + data.firewall + '</span>/5 &nbsp; antivirus: <span class="prompt">' + data.antivirus + '</span>/5<br>' +
-        '&nbsp;&nbsp;open ports: <span class="prompt">' + data.ports.join(', ') + '</span>');
+        '&nbsp;&nbsp;open ports: <span class="prompt">' + data.ports.join(', ') + '</span><br>' +
+        '&nbsp;&nbsp;(defense modules not shown — try <span class="prompt">deepscan</span>)');
     }catch(e){ printLine('scan: could not reach the server', 'err'); }
   }
-  async function termExploit(username){
-    if(!username){ printLine('usage: exploit &lt;username&gt;', 'err'); return; }
+  async function termDeepScan(username){
+    if(!username){ printLine('usage: deepscan &lt;username&gt; — $' + 75 + ', reveals which module (if any) guards each port', 'err'); return; }
     try{
-      const res = await fetch('/api/hack/exploit', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ target: username }) });
+      const res = await fetch('/api/hack/deepscan/' + encodeURIComponent(username));
+      const data = await res.json();
+      if(!res.ok){ printLine('deepscan: ' + (data.error || 'failed'), 'err'); return; }
+      const rows = data.ports.map(p => p + ': ' + (data.modules[p] || '<span class="prompt">none</span>')).join('<br>&nbsp;&nbsp;');
+      printLine('Deep scan of ' + escapeHtml(data.username) + '…<br>&nbsp;&nbsp;' + rows);
+      bankLoad();
+    }catch(e){ printLine('deepscan: could not reach the server', 'err'); }
+  }
+  async function termSecure(portStr, module){
+    if(!portStr || !module){ printLine('usage: secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;', 'err'); return; }
+    try{
+      const res = await fetch('/api/hack/secure', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ port: Number(portStr), module }) });
+      const data = await res.json();
+      if(!res.ok){ printLine('secure: ' + (data.error || 'failed'), 'err'); return; }
+      printLine('Port ' + portStr + ' now running <span class="prompt">' + module + '</span>. Balance: ' + bankFormatMoney(data.balance) + '.');
+      bankLoad();
+    }catch(e){ printLine('secure: could not reach the server', 'err'); }
+  }
+  async function termExploit(username, portStr, approach){
+    if(!username || !portStr || !approach){ printLine('usage: exploit &lt;username&gt; &lt;port&gt; &lt;bruteforce|stealth|injection&gt;', 'err'); return; }
+    try{
+      const res = await fetch('/api/hack/exploit', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ target: username, port: Number(portStr), approach }) });
       const data = await res.json();
       if(!res.ok){ printLine('exploit: ' + (data.error || 'failed'), 'err'); return; }
       if(data.success) printLine('Breach successful (' + data.chance + '% odds). You have ' + data.breachExpiresIn + 's — try <span class="prompt">steal</span> or <span class="prompt">deploy &lt;malware&gt;</span>.');
-      else printLine('Exploit failed (' + data.chance + '% odds). Their firewall held.', 'err');
+      else printLine('Exploit failed (' + data.chance + '% odds). Their defenses held.', 'err');
+      bankLoad();
     }catch(e){ printLine('exploit: could not reach the server', 'err'); }
   }
   async function termSteal(){
@@ -4074,6 +4097,7 @@
       if(!res.ok){ printLine('secstatus: ' + (data.error || 'failed'), 'err'); return; }
       const sec = data.security;
       let out = 'firewall: <span class="prompt">' + sec.firewall + '</span>/5 &nbsp; antivirus: <span class="prompt">' + sec.antivirus + '</span>/5 &nbsp; balance: <span class="prompt">' + bankFormatMoney(sec.balance) + '</span>';
+      out += '<br>ports: ' + sec.ports.map(p => p + (sec.modules[p] ? ' (' + sec.modules[p] + ')' : '')).join(', ');
       out += '<br>infections: ' + (sec.infections.length ? sec.infections.map(i => (i.malware ? i.malware.name : i.malwareId) + ' (by ' + escapeHtml(i.by) + ')').join(', ') : 'none');
       if(sec.ransom) out += '<br><span class="err">locked — ' + bankFormatMoney(sec.ransom.amount) + ' ransom from ' + escapeHtml(sec.ransom.by) + '</span>';
       printLine(out);
@@ -4350,9 +4374,11 @@
           '&nbsp;&nbsp;<span class="prompt">crash</span>, <span class="prompt">freeze</span> — trigger the test dialogs<br>' +
           '&nbsp;&nbsp;<span class="prompt">theme dark|light</span>, <span class="prompt">sound on|off</span> — settings<br>' +
           '&nbsp;&nbsp;<span class="prompt">echo &lt;text&gt;</span>, <span class="prompt">clear</span>, <span class="prompt">history</span><br>' +
-          '&nbsp;&nbsp;<b>Hacking</b> — <span class="prompt">targets</span>, <span class="prompt">scan &lt;user&gt;</span>, <span class="prompt">exploit &lt;user&gt;</span>, <span class="prompt">steal</span>, <span class="prompt">deploy &lt;malware&gt;</span><br>' +
-          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">avscan</span>, <span class="prompt">secstatus</span>, <span class="prompt">dossier &lt;user&gt;</span>, <span class="prompt">malware</span> — malware catalog<br>' +
-          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span><br>' +
+          '&nbsp;&nbsp;<b>Hacking</b> — <span class="prompt">targets</span>, <span class="prompt">scan &lt;user&gt;</span>, <span class="prompt">deepscan &lt;user&gt;</span> ($75, reveals modules)<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">exploit &lt;user&gt; &lt;port&gt; &lt;bruteforce|stealth|injection&gt;</span> ($20/try) — bruteforce beats decoy, loses to ratelimiter; stealth beats ratelimiter, loses to sentinel; injection beats sentinel, loses to decoy<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">steal</span>, <span class="prompt">deploy &lt;malware&gt;</span>, <span class="prompt">avscan</span>, <span class="prompt">secstatus</span>, <span class="prompt">dossier &lt;user&gt;</span>, <span class="prompt">malware</span> — malware catalog<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;</span> ($150) — install your own defense module<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span> — smaller, general-purpose edge<br>' +
           '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span>'
         );
         break;
@@ -4467,7 +4493,9 @@
         break;
       case 'targets': termTargets(); break;
       case 'scan': termScan(parts[1]); break;
-      case 'exploit': termExploit(parts[1]); break;
+      case 'deepscan': termDeepScan(parts[1]); break;
+      case 'secure': termSecure(parts[1], parts[2]); break;
+      case 'exploit': termExploit(parts[1], parts[2], parts[3]); break;
       case 'steal': termSteal(); break;
       case 'deploy': termDeploy(parts[1]); break;
       case 'avscan': termAvscan(); break;

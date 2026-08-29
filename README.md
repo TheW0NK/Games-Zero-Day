@@ -71,17 +71,29 @@ Then open http://localhost:3000
   transaction history, ransom payoff) is the GUI half; `wallet`,
   `transfer <user> <amount>`, and `payransom` are the Terminal half.
   Transactions log to `./data/bank.json`.
-- **Hacking** is entirely Terminal-driven: `scan <user>` recons a target's
-  firewall/antivirus level and open ports, `exploit <user>` attempts a breach
-  (odds driven by both players' firewall levels), and a successful breach
-  opens a 2-minute window to `steal` money or `deploy <malware>` — see
-  `malware` for the full catalog of viruses, trojans, worms, ransomware,
-  spyware, rootkits, adware, and botnet clients, each with a real mechanical
-  effect (balance drain, a persistent backdoor, an account-locking ransom,
-  log-hiding, remote monitoring, or firewall weakening). `avscan` tries to
-  clean your own infections; `firewall upgrade` / `antivirus upgrade` spend
-  balance to raise your defenses; `secstatus` shows your own security
-  profile and intrusion log. Every account's security profile lives
+- **Hacking** is entirely Terminal-driven and primarily skill-based, not
+  pay-to-win: `scan <user>` recons a target's open ports for free; `secure
+  <port> <ratelimiter|sentinel|decoy>` ($150) lets a player install their own
+  defense module on one of their own open ports; `deepscan <user>` ($75)
+  reveals which module (if any) guards each of a target's ports. Attacking
+  means picking a port and an approach — `exploit <user> <port>
+  <bruteforce|stealth|injection>` ($20/attempt) — and the three approaches
+  and three modules form a closed counter triangle (bruteforce beats decoy
+  but loses to ratelimiter; stealth beats ratelimiter but loses to sentinel;
+  injection beats sentinel but loses to decoy), so success comes from
+  reading (or paying to reveal) a target's setup and picking the right
+  counter, not from grinding a single stat. Firewall/antivirus levels
+  (`firewall upgrade`, `antivirus upgrade`) only shift the odds a few points
+  either way, and every roll — even with a persistent backdoor installed —
+  is clamped between 10% and 90%, so no combination of purchases ever
+  guarantees or forecloses an outcome. A successful breach opens a 2-minute
+  window to `steal` money or `deploy <malware>` — see `malware` for the full
+  catalog of viruses, trojans, worms, ransomware, spyware, rootkits, adware,
+  and a botnet client, each with a real mechanical effect (balance drain, a
+  persistent backdoor, an account-locking ransom, log-hiding, remote
+  monitoring, or firewall weakening). `avscan` tries to clean your own
+  infections; `secstatus` shows your own security profile, installed
+  modules, and intrusion log. Every account's security profile lives
   alongside its user record.
 - **BIOS setup** is available only by pressing a key during the textual POST
   screen. Recovery also includes non-destructive diagnostics and boot-log

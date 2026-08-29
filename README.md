@@ -25,9 +25,15 @@ Then open http://localhost:3000
 - **User accounts** are stored under `./data/users.json`. There's no seeded
   default account — the boot screen is a self-service Sign Up / Sign In pair,
   and the very first account ever created becomes the superuser. Superusers
-  can add, modify, deactivate, remove, or set the currency balance of other
-  accounts from Settings > Users (or `setbalance <user> <amount>` in the
-  Terminal) — handy for correcting an exploited bug or just moderating.
+  can add, modify, deactivate, remove, mute, or set the currency balance of
+  other accounts from Settings > Users (or `setbalance <user> <amount>` in
+  the Terminal) — handy for correcting an exploited bug or just moderating.
+  Passwords are never stored or logged in plain text: each one is hashed
+  with `scrypt` and a random per-account salt (`hashPassword`/
+  `passwordMatches` in `server.js`), compared with a timing-safe check, and
+  the hash is never included in any API response. That's intentionally a
+  one-way hash rather than reversible encryption — nothing in the app, not
+  even a superuser, can ever recover a user's actual password from it.
 - **Files app / Terminal** read and write actual files under
   `./userfiles/<username>/` on this machine. Each account has its own home;
   delete something in Files, it's gone from disk. Create a file in Terminal,
@@ -96,7 +102,23 @@ Then open http://localhost:3000
   monitoring, or firewall weakening). `avscan` tries to clean your own
   infections; `secstatus` shows your own security profile, installed
   modules, and intrusion log. Every account's security profile lives
-  alongside its user record.
+  alongside its user record. The **Firewall** and **Antivirus** App Store
+  apps are GUI front-ends for the same `/api/hack/*` endpoints (level
+  upgrades, per-port modules, scanning) if you'd rather not use the
+  Terminal for defense — attacking another player stays Terminal-only.
+- **Chat** now has three tabs in one window: **Direct** (1:1, unchanged),
+  **Public** (one shared room every active account can read and post to,
+  stored in `./data/public-chat.json`), and **Groups** (member-scoped rooms
+  a player creates and invites people into, stored in `./data/groups.json` +
+  `./data/group-messages.json`; the creator is the owner and can add/remove
+  members or delete the group, anyone can leave). A Block button on a DM
+  contact stops messages in both directions until unblocked
+  (`/api/social/block`); blocked usernames live on the user record. Every
+  message on every surface passes through a shared, whole-word slur filter
+  before it's stored — see `containsBannedContent` in `server.js` to extend
+  the pattern list. Superusers can delete any message (regular users can
+  delete their own) and mute an account from Settings > Users, which blocks
+  that account from posting anywhere until unmuted.
 - **BIOS setup** is available only by pressing a key during the textual POST
   screen. Recovery also includes non-destructive diagnostics and boot-log
   viewing.

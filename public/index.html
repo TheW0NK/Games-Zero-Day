@@ -639,7 +639,12 @@
   .music-add-row{ width:100%; display:flex; flex-direction:column; gap:6px; padding-top:8px; border-top:1px solid var(--panel-border); }
 
   /* Chat */
-  .chat-app{ height:100%; display:flex; }
+  .chat-app{ height:100%; display:flex; flex-direction:column; }
+  .chat-tabs{ display:flex; gap:2px; padding:8px 8px 0; flex-shrink:0; }
+  .chat-tab{ padding:7px 14px; border-radius:8px 8px 0 0; background:transparent; border:none; color:var(--ink-dim); font-size:11.5px; font-weight:600; cursor:pointer; }
+  .chat-tab:hover{ color:var(--ink); }
+  .chat-tab.active{ background:rgba(125,216,200,0.12); color:var(--accent); }
+  .chat-body{ flex:1; min-height:0; display:flex; }
   .chat-contacts{ width:170px; flex-shrink:0; border-right:1px solid var(--panel-border); overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:3px; }
   .chat-contact{ display:flex; align-items:center; gap:8px; padding:8px 9px; border-radius:8px; cursor:pointer; font-size:12px; }
   .chat-contact:hover{ background:rgba(255,255,255,0.05); }
@@ -647,17 +652,28 @@
   .chat-contact .c-avatar{ width:24px; height:24px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; flex-shrink:0; }
   .chat-contact .c-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
   .chat-contact.deactivated .c-name{ text-decoration:line-through; opacity:0.7; }
+  .chat-contact .c-blocked-badge{ font-size:8.5px; padding:2px 5px; border-radius:4px; background:rgba(255,107,107,0.15); color:var(--danger); flex-shrink:0; }
+  .chat-new-group-btn{ width:100%; padding:8px 9px; border-radius:8px; border:1px dashed var(--panel-border); background:transparent; color:var(--ink-dim); font-size:11.5px; cursor:pointer; margin-bottom:4px; }
+  .chat-new-group-btn:hover{ color:var(--accent); border-color:var(--accent-soft); }
   .chat-empty{ margin:auto; color:var(--ink-dim); font-size:12px; text-align:center; padding:20px; }
   .chat-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
-  .chat-header{ padding:12px 14px; border-bottom:1px solid var(--panel-border); font-weight:500; font-size:13px; flex-shrink:0; }
+  .chat-header{ padding:12px 14px; border-bottom:1px solid var(--panel-border); font-weight:500; font-size:13px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .chat-header-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .chat-header-actions button{ padding:4px 10px; border-radius:999px; border:1px solid var(--panel-border); background:transparent; color:var(--ink-dim); font-size:10.5px; cursor:pointer; }
+  .chat-header-actions button:hover{ color:var(--ink); border-color:var(--accent-soft); }
+  .chat-header-actions button.danger{ color:var(--danger); border-color:rgba(255,107,107,0.35); }
   .chat-messages{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:8px; }
-  .chat-msg{ max-width:70%; padding:8px 11px; border-radius:12px; font-size:12.5px; line-height:1.4; word-wrap:break-word; }
+  .chat-msg{ max-width:70%; padding:8px 11px; border-radius:12px; font-size:12.5px; line-height:1.4; word-wrap:break-word; position:relative; }
   .chat-msg.mine{ align-self:flex-end; background:var(--accent); color:#08110f; border-bottom-right-radius:3px; }
   .chat-msg.theirs{ align-self:flex-start; background:rgba(255,255,255,0.07); border-bottom-left-radius:3px; }
-  .chat-msg .m-time{ display:block; font-size:9px; opacity:0.65; margin-top:3px; }
+  .chat-msg .m-from{ display:block; font-size:9.5px; font-weight:600; opacity:0.75; margin-bottom:2px; }
+  .chat-msg .m-time{ display:inline-block; font-size:9px; opacity:0.65; margin-top:3px; }
+  .chat-msg .m-del{ opacity:0.5; cursor:pointer; margin-left:8px; font-size:9px; }
+  .chat-msg .m-del:hover{ opacity:1; color:var(--danger); }
   .chat-input-row{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid var(--panel-border); flex-shrink:0; }
   .chat-input{ flex:1; padding:9px 12px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid var(--panel-border); color:var(--ink); font-size:12px; outline:none; }
   .chat-input:focus{ border-color:var(--accent-soft); }
+  .chat-input:disabled{ opacity:0.5; }
   .chat-send-btn{ width:34px; height:34px; border-radius:50%; border:none; background:var(--accent); color:#08110f; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
   .chat-send-btn svg{ width:15px; height:15px; }
   .chat-send-btn:hover{ opacity:0.9; }
@@ -688,6 +704,16 @@
   .bank-tx .tx-amt.in{ color:var(--accent); }
   .bank-tx .tx-amt.out{ color:var(--danger); }
   .bank-empty{ margin:auto; color:var(--ink-dim); font-size:12px; text-align:center; padding:20px; }
+
+  /* Firewall / Antivirus */
+  .sec-app{ height:100%; display:flex; flex-direction:column; padding:16px; gap:14px; overflow-y:auto; }
+  .sec-level-card{ display:flex; align-items:center; justify-content:space-between; gap:12px; background:linear-gradient(135deg, rgba(125,216,200,0.16), rgba(125,216,200,0.04)); border:1px solid var(--accent-soft); border-radius:14px; padding:14px 18px; }
+  .sec-level-label{ font-size:11px; color:var(--ink-dim); letter-spacing:0.3px; }
+  .sec-level-amount{ font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700; color:var(--accent); margin-top:2px; }
+  .sec-port-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border-radius:9px; background:rgba(255,255,255,0.04); font-size:12px; }
+  .sec-port-row select{ padding:5px 8px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--panel-border); color:var(--ink); font-size:11px; }
+  .sec-infection-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border-radius:9px; background:rgba(255,107,107,0.08); font-size:12px; }
+  .sec-infection-row small{ color:var(--ink-dim); display:block; font-size:10px; margin-top:1px; }
 
   /* Games (shared) */
   .game-app{ height:100%; display:flex; flex-direction:column; align-items:center; padding:16px; gap:12px; }
@@ -753,6 +779,8 @@
     <g id="i-camera"><path d="M4 8h3l2-2h6l2 2h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/></g>
     <g id="i-monitor"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></g>
     <g id="i-bank"><path d="M12 3 3 8h18Z"/><path d="M5 10v9M9 10v9M15 10v9M19 10v9M3 21h18"/></g>
+    <g id="i-shield-check"><path d="M12 2 3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4Z"/><path d="M8.5 12.5l2.2 2.2L15.5 10"/></g>
+    <g id="i-bug"><path d="M8 6l1.5 1.5M16 6l-1.5 1.5"/><rect x="8" y="9" width="8" height="9" rx="4"/><path d="M12 9V6M3 13h5M16 13h5M4 18l4-2M20 18l-4-2M4 9l4 2M20 9l-4 2"/></g>
   </defs>
 </svg>
 
@@ -1189,13 +1217,23 @@
             </div>
             <div class="win-body">
               <div class="chat-app">
-                <div class="chat-contacts" id="chatContacts"></div>
-                <div class="chat-main">
-                  <div class="chat-header" id="chatHeader">Select someone to chat with</div>
-                  <div class="chat-messages" id="chatMessages"></div>
-                  <div class="chat-input-row">
-                    <input class="chat-input" id="chatInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter') chatSend()">
-                    <button class="chat-send-btn" id="chatSendBtn" onclick="chatSend()" title="Send"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg></button>
+                <div class="chat-tabs">
+                  <button class="chat-tab active" data-tab="direct" onclick="chatSwitchTab('direct')">Direct</button>
+                  <button class="chat-tab" data-tab="public" onclick="chatSwitchTab('public')">Public</button>
+                  <button class="chat-tab" data-tab="groups" onclick="chatSwitchTab('groups')">Groups</button>
+                </div>
+                <div class="chat-body">
+                  <div class="chat-contacts" id="chatContacts"></div>
+                  <div class="chat-main">
+                    <div class="chat-header">
+                      <span id="chatHeaderText">Select someone to chat with</span>
+                      <span class="chat-header-actions" id="chatHeaderActions"></span>
+                    </div>
+                    <div class="chat-messages" id="chatMessages"></div>
+                    <div class="chat-input-row">
+                      <input class="chat-input" id="chatInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter') chatSend()">
+                      <button class="chat-send-btn" id="chatSendBtn" onclick="chatSend()" title="Send"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg></button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1231,6 +1269,55 @@
                 </div>
                 <div class="bank-section-label">Recent activity</div>
                 <div class="bank-history" id="bankHistory"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FIREWALL WINDOW -->
+          <div class="window" id="win-firewall" style="left:540px; top:60px; width:420px; height:520px;">
+            <div class="win-titlebar" onmousedown="startDrag(event,'win-firewall')" ondblclick="maximizeApp('firewall')">
+              <div class="win-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-shield-check"/></svg> Firewall</div>
+              <div class="win-controls">
+                <button class="win-btn min" onclick="minimizeApp('firewall')"></button>
+                <button class="win-btn max" onclick="maximizeApp('firewall')"></button>
+                <button class="win-btn close" onclick="closeApp('firewall')"></button>
+              </div>
+            </div>
+            <div class="win-body">
+              <div class="sec-app">
+                <div class="sec-level-card">
+                  <div><div class="sec-level-label">Firewall level</div><div class="sec-level-amount" id="fwLevel">1/5</div></div>
+                  <button class="files-tbtn" id="fwUpgradeBtn" onclick="fwUpgrade()">Upgrade</button>
+                </div>
+                <div class="bank-section-label">Ports &amp; defense modules ($150 each)</div>
+                <div id="fwPorts" style="display:flex; flex-direction:column; gap:6px;"></div>
+                <div class="bank-error" id="fwError"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ANTIVIRUS WINDOW -->
+          <div class="window" id="win-antivirus" style="left:560px; top:80px; width:420px; height:520px;">
+            <div class="win-titlebar" onmousedown="startDrag(event,'win-antivirus')" ondblclick="maximizeApp('antivirus')">
+              <div class="win-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bug"/></svg> Antivirus</div>
+              <div class="win-controls">
+                <button class="win-btn min" onclick="minimizeApp('antivirus')"></button>
+                <button class="win-btn max" onclick="maximizeApp('antivirus')"></button>
+                <button class="win-btn close" onclick="closeApp('antivirus')"></button>
+              </div>
+            </div>
+            <div class="win-body">
+              <div class="sec-app">
+                <div class="sec-level-card">
+                  <div><div class="sec-level-label">Antivirus level</div><div class="sec-level-amount" id="avLevel">1/5</div></div>
+                  <button class="files-tbtn" id="avUpgradeBtn" onclick="avUpgrade()">Upgrade</button>
+                </div>
+                <div class="bank-ransom-banner" id="avRansomBanner" style="display:none;"></div>
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                  <div class="bank-section-label">Infections</div>
+                  <button class="files-tbtn" onclick="avScan()">Run Scan</button>
+                </div>
+                <div id="avInfections" style="display:flex; flex-direction:column; gap:6px;"></div>
               </div>
             </div>
           </div>
@@ -1286,6 +1373,8 @@
             <div class="sm-app" onclick="openApp('settings'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-gear"/></svg></div><div class="lbl">Settings</div></div>
             <div class="sm-app" onclick="openApp('chat'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chat"/></svg></div><div class="lbl">Chat</div></div>
             <div class="sm-app" onclick="openApp('bank'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bank"/></svg></div><div class="lbl">Bank</div></div>
+            <div class="sm-app" data-optional-app="firewall" onclick="openApp('firewall'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-shield-check"/></svg></div><div class="lbl">Firewall</div></div>
+            <div class="sm-app" data-optional-app="antivirus" onclick="openApp('antivirus'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bug"/></svg></div><div class="lbl">Antivirus</div></div>
           </div>
           <div class="sm-label">Apps</div>
           <div class="sm-grid">
@@ -1950,8 +2039,12 @@
         const toggleBtn = !isSelf
           ? '<button class="mini-btn' + (user.active === false ? '' : ' danger') + '" onclick="toggleUserActive(\'' + escapeAttr(user.id) + '\', ' + (user.active === false) + ')">' + (user.active === false ? 'Reactivate' : 'Deactivate') + '</button>'
           : '';
-        return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + ' · $' + user.balance.toLocaleString() + '</div>' + statusBadge + '</div>' +
-          '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' + toggleBtn +
+        const muteBtn = !isSelf
+          ? '<button class="mini-btn' + (user.muted ? '' : ' danger') + '" onclick="toggleUserMuted(\'' + escapeAttr(user.id) + '\', ' + (!user.muted) + ')">' + (user.muted ? 'Unmute' : 'Mute') + '</button>'
+          : '';
+        const mutedBadge = user.muted ? '<span class="user-status inactive">Muted</span>' : '';
+        return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + ' · $' + user.balance.toLocaleString() + '</div>' + statusBadge + mutedBadge + '</div>' +
+          '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' + toggleBtn + muteBtn +
           '<button class="mini-btn danger" onclick="deleteUser(\'' + escapeAttr(user.id) + '\')">Remove</button></div></div>';
       }).join('');
     }catch(e){ document.getElementById('userError').textContent = e.message; }
@@ -1962,6 +2055,14 @@
     if(!res.ok){ showUserError(data.error); return; }
     loadUsers();
     showToast(reactivate ? 'User reactivated' : 'User deactivated');
+  }
+
+  async function toggleUserMuted(id, mute){
+    const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ muted: mute }) });
+    const data = await res.json();
+    if(!res.ok){ showUserError(data.error); return; }
+    loadUsers();
+    showToast(mute ? 'User muted' : 'User unmuted');
   }
 
   function showUserError(message){ document.getElementById('userError').textContent = message || ''; }
@@ -2072,6 +2173,8 @@
     if(id === 'monitor') monitorStart();
     if(id === 'chat') chatLoadContacts();
     if(id === 'bank') bankLoad();
+    if(id === 'firewall') fwLoad();
+    if(id === 'antivirus') avLoad();
   }
   function closeApp(id){
     const w = document.getElementById('win-'+id);
@@ -2317,7 +2420,7 @@
     texteditor:{label:'Text Editor', icon:iconSvg('notepad')}, calculator:{label:'Calculator', icon:iconSvg('calculator')},
     photos:{label:'Photo Viewer', icon:iconSvg('photo')}, appstore:{label:'App Store', icon:iconSvg('grid')}, ide:{label:'Aegis IDE', icon:'</>'}, writer:{label:'Writer', icon:iconSvg('document')}, sheets:{label:'Sheets', icon:iconSvg('grid')}, camera:{label:'Camera', icon:iconSvg('camera')}, monitor:{label:'System Monitor', icon:iconSvg('monitor')}, music:{label:'Music Player', icon:iconSvg('music-note')},
     snake:{label:'Snake', icon:iconSvg('snake')}, g2048:{label:'2048', icon:iconSvg('grid')}, chat:{label:'Chat', icon:iconSvg('chat')},
-    bank:{label:'Bank', icon:iconSvg('bank')}
+    bank:{label:'Bank', icon:iconSvg('bank')}, firewall:{label:'Firewall', icon:iconSvg('shield-check')}, antivirus:{label:'Antivirus', icon:iconSvg('bug')}
   };
   let altTabActive = false, altTabIndex = 0;
   function getOpenWindowIds(){
@@ -2880,7 +2983,9 @@
     { id:'camera', name:'Camera', description:'Capture photos from your device camera.' },
     { id:'ide', name:'Aegis IDE', description:'Write and preview your own HTML apps.' },
     { id:'writer', name:'Writer', description:'Create and save formatted notes.' },
-    { id:'sheets', name:'Sheets', description:'Work with simple editable tables.' }
+    { id:'sheets', name:'Sheets', description:'Work with simple editable tables.' },
+    { id:'firewall', name:'Firewall', description:'Manage your firewall level and per-port defense modules.' },
+    { id:'antivirus', name:'Antivirus', description:'Scan for and remove malware, manage your antivirus level.' }
   ];
   let installedApps = new Set(storeApps.map(app => app.id));
   function updateInstalledAppVisibility(){
@@ -3838,12 +3943,39 @@
   });
 
   /* ================= CHAT ================= */
-  // Direct messages between users. Contacts are every other account on this
-  // machine; the server keeps the real history, this just polls for new
-  // messages while the window is open.
+  // Three surfaces sharing one window: Direct (1:1, server keeps history
+  // per conversation), Public (one shared room every account can post to),
+  // and Groups (member-scoped rooms a player creates). All three route
+  // through the same server-side moderation (mute check + slur filter)
+  // on the way in, so this file only needs to render whatever comes back.
+  let chatMode = 'direct';
   let chatContacts = [];
   let chatActiveWith = null;
   let chatLastAt = null;
+  let chatPublicLastAt = null;
+  let chatGroups = [];
+  let chatActiveGroupId = null;
+  let chatGroupLastAt = null;
+
+  function chatSwitchTab(tab){
+    chatMode = tab;
+    document.querySelectorAll('.chat-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+    document.getElementById('chatContacts').style.display = tab === 'public' ? 'none' : '';
+    document.getElementById('chatMessages').innerHTML = '';
+    document.getElementById('chatInput').disabled = false;
+    if(tab === 'direct'){
+      chatRenderContacts();
+      if(chatActiveWith) chatSelectContact(chatActiveWith);
+      else { document.getElementById('chatHeaderText').textContent = 'Select someone to chat with'; document.getElementById('chatHeaderActions').innerHTML = ''; document.getElementById('chatInput').disabled = true; }
+    } else if(tab === 'public'){
+      chatPublicLastAt = null;
+      document.getElementById('chatHeaderText').textContent = 'Public Chat';
+      document.getElementById('chatHeaderActions').innerHTML = '';
+      chatFetchPublic(true);
+    } else if(tab === 'groups'){
+      chatLoadGroups();
+    }
+  }
 
   async function chatLoadContacts(){
     try{
@@ -3851,9 +3983,9 @@
       if(!res.ok) return;
       const data = await res.json();
       chatContacts = data.contacts;
-      chatRenderContacts();
+      if(chatMode === 'direct') chatRenderContacts();
       if(chatActiveWith && !chatContacts.some(c => c.username === chatActiveWith)) chatActiveWith = null;
-      if(!chatActiveWith && chatContacts.length) chatSelectContact(chatContacts[0].username);
+      if(chatMode === 'direct' && !chatActiveWith && chatContacts.length) chatSelectContact(chatContacts[0].username);
     }catch(e){ /* offline — leave the last known contact list up */ }
   }
   function chatRenderContacts(){
@@ -3864,6 +3996,7 @@
       '<div class="chat-contact' + (c.username === chatActiveWith ? ' active' : '') + (c.active === false ? ' deactivated' : '') + '" onclick="chatSelectContact(\'' + escapeAttr(c.username) + '\')">' +
         '<div class="c-avatar">' + escapeHtml(c.username.charAt(0).toUpperCase()) + '</div>' +
         '<span class="c-name">' + escapeHtml(c.username) + '</span>' +
+        (c.blocked ? '<span class="c-blocked-badge">Blocked</span>' : '') +
       '</div>'
     ).join('');
   }
@@ -3871,9 +4004,22 @@
     chatActiveWith = username;
     chatLastAt = null;
     document.getElementById('chatMessages').innerHTML = '';
-    document.getElementById('chatHeader').textContent = username;
+    document.getElementById('chatHeaderText').textContent = username;
+    const contact = chatContacts.find(c => c.username === username);
+    document.getElementById('chatHeaderActions').innerHTML = '<button onclick="chatToggleBlock(\'' + escapeAttr(username) + '\')">' + (contact && contact.blocked ? 'Unblock' : 'Block') + '</button>';
     chatRenderContacts();
     chatFetchMessages(true);
+  }
+  async function chatToggleBlock(username){
+    const contact = chatContacts.find(c => c.username === username);
+    const wasBlocked = contact && contact.blocked;
+    try{
+      const res = await fetch('/api/social/' + (wasBlocked ? 'unblock' : 'block'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+      if(!res.ok){ const data = await res.json(); showToast(data.error || 'Could not update block'); return; }
+      showToast(wasBlocked ? 'Unblocked ' + username : 'Blocked ' + username);
+      await chatLoadContacts();
+      if(chatActiveWith === username) chatSelectContact(username);
+    }catch(e){ showToast('Could not reach the server'); }
   }
   async function chatFetchMessages(initial){
     if(!chatActiveWith) return;
@@ -3883,39 +4029,180 @@
       const res = await fetch(url);
       if(!res.ok) return;
       const data = await res.json();
-      if(data.messages.length) chatAppendMessages(data.messages);
+      if(data.messages.length){ chatAppendMessages(data.messages, 'direct'); chatLastAt = data.messages[data.messages.length - 1].at; }
     }catch(e){ /* offline — try again on the next poll */ }
   }
-  function chatAppendMessages(messages){
+  function chatRenderMessageRow(m, kind){
+    const mine = m.from === currentUser.username;
+    const showFrom = kind !== 'direct';
+    const canDelete = mine || currentUser.role === 'superuser';
+    const time = new Date(m.at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const delAttr = kind === 'group' ? ('chatDeleteMessage(\'' + m.id + '\',\'group\',\'' + (m.groupId || '') + '\')') : ('chatDeleteMessage(\'' + m.id + '\',\'' + kind + '\')');
+    return '<div class="chat-msg ' + (mine ? 'mine' : 'theirs') + '" data-mid="' + m.id + '">' +
+      (showFrom ? '<span class="m-from">' + escapeHtml(m.from) + '</span>' : '') +
+      escapeHtml(m.text) +
+      '<span class="m-time">' + time + '</span>' +
+      (canDelete ? '<span class="m-del" onclick="' + delAttr + '">delete</span>' : '') +
+      '</div>';
+  }
+  function chatAppendMessages(messages, kind){
     const el = document.getElementById('chatMessages');
     if(!el) return;
     const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    messages.forEach(m => {
-      const mine = m.from === currentUser.username;
-      const row = document.createElement('div');
-      row.className = 'chat-msg ' + (mine ? 'mine' : 'theirs');
-      const time = new Date(m.at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-      row.innerHTML = escapeHtml(m.text) + '<span class="m-time">' + time + '</span>';
-      el.appendChild(row);
-      chatLastAt = m.at;
-    });
+    el.insertAdjacentHTML('beforeend', messages.map(m => chatRenderMessageRow(m, kind)).join(''));
     if(wasNearBottom) el.scrollTop = el.scrollHeight;
+  }
+  function chatDeleteMessage(id, kind, groupId){
+    const url = kind === 'direct' ? ('/api/chat/messages/' + id)
+      : kind === 'public' ? ('/api/chat/public/' + id)
+      : ('/api/groups/' + groupId + '/messages/' + id);
+    fetch(url, { method:'DELETE' }).then(async res => {
+      if(!res.ok){ const data = await res.json().catch(() => ({})); showToast(data.error || 'Could not delete message'); return; }
+      const row = document.querySelector('.chat-msg[data-mid="' + id + '"]');
+      if(row) row.remove();
+    }).catch(() => showToast('Could not reach the server'));
   }
   async function chatSend(){
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
-    if(!text || !chatActiveWith) return;
+    if(!text) return;
+    if(chatMode === 'direct' && !chatActiveWith) return;
+    if(chatMode === 'groups' && !chatActiveGroupId) return;
     input.value = '';
     try{
-      const res = await fetch('/api/chat/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to: chatActiveWith, text }) });
+      let res, kind;
+      if(chatMode === 'direct'){
+        res = await fetch('/api/chat/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to: chatActiveWith, text }) });
+        kind = 'direct';
+      } else if(chatMode === 'public'){
+        res = await fetch('/api/chat/public', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text }) });
+        kind = 'public';
+      } else {
+        res = await fetch('/api/groups/' + chatActiveGroupId + '/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ text }) });
+        kind = 'group';
+      }
       const data = await res.json();
       if(!res.ok){ showToast(data.error || 'Could not send message'); return; }
-      chatAppendMessages([data.message]);
+      if(kind === 'direct') chatLastAt = data.message.at;
+      else if(kind === 'public') chatPublicLastAt = data.message.at;
+      else chatGroupLastAt = data.message.at;
+      chatAppendMessages([data.message], kind);
     }catch(e){ showToast('Could not send message — is the server still running?'); }
   }
+
+  /* ---- Public chat ---- */
+  async function chatFetchPublic(initial){
+    if(chatMode !== 'public') return;
+    try{
+      let url = '/api/chat/public';
+      if(chatPublicLastAt && !initial) url += '?since=' + encodeURIComponent(chatPublicLastAt);
+      const res = await fetch(url);
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data.messages.length){ chatAppendMessages(data.messages, 'public'); chatPublicLastAt = data.messages[data.messages.length - 1].at; }
+    }catch(e){ /* offline — try again next poll */ }
+  }
+
+  /* ---- Groups ---- */
+  async function chatLoadGroups(){
+    try{
+      const res = await fetch('/api/groups');
+      if(!res.ok) return;
+      const data = await res.json();
+      chatGroups = data.groups;
+      if(chatActiveGroupId && !chatGroups.some(g => g.id === chatActiveGroupId)) chatActiveGroupId = null;
+      chatRenderGroupsList();
+      if(!chatActiveGroupId && chatGroups.length) chatSelectGroup(chatGroups[0].id);
+      else if(!chatGroups.length){ document.getElementById('chatHeaderText').textContent = 'No groups yet'; document.getElementById('chatHeaderActions').innerHTML = ''; document.getElementById('chatInput').disabled = true; }
+    }catch(e){ /* offline */ }
+  }
+  function chatRenderGroupsList(){
+    const el = document.getElementById('chatContacts');
+    if(!el) return;
+    const btn = '<button class="chat-new-group-btn" onclick="chatCreateGroup()">+ New Group</button>';
+    if(!chatGroups.length){ el.innerHTML = btn + '<div class="chat-empty">No groups yet</div>'; return; }
+    el.innerHTML = btn + chatGroups.map(g =>
+      '<div class="chat-contact' + (g.id === chatActiveGroupId ? ' active' : '') + '" onclick="chatSelectGroup(\'' + g.id + '\')">' +
+        '<div class="c-avatar">' + escapeHtml(g.name.charAt(0).toUpperCase()) + '</div>' +
+        '<span class="c-name">' + escapeHtml(g.name) + '</span>' +
+      '</div>'
+    ).join('');
+  }
+  async function chatCreateGroup(){
+    const name = prompt('Group name:');
+    if(!name) return;
+    const membersInput = prompt('Members to invite (comma-separated usernames, optional):') || '';
+    const members = membersInput.split(',').map(s => s.trim()).filter(Boolean);
+    try{
+      const res = await fetch('/api/groups', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name, members }) });
+      const data = await res.json();
+      if(!res.ok){ showToast(data.error || 'Could not create group'); return; }
+      showToast('Group created');
+      await chatLoadGroups();
+      chatSelectGroup(data.group.id);
+    }catch(e){ showToast('Could not reach the server'); }
+  }
+  function chatSelectGroup(id){
+    chatActiveGroupId = id;
+    chatGroupLastAt = null;
+    document.getElementById('chatMessages').innerHTML = '';
+    document.getElementById('chatInput').disabled = false;
+    const group = chatGroups.find(g => g.id === id);
+    if(!group) return;
+    const isOwner = group.owner === currentUser.username;
+    const actions = ['<button onclick="chatGroupAddMember(\'' + id + '\')">Add</button>'];
+    actions.push('<button onclick="chatGroupLeave(\'' + id + '\')" class="danger">' + (isOwner ? 'Delete' : 'Leave') + '</button>');
+    document.getElementById('chatHeaderText').textContent = group.name + ' (' + group.members.length + ')';
+    document.getElementById('chatHeaderActions').innerHTML = actions.join('');
+    chatRenderGroupsList();
+    chatFetchGroupMessages(true);
+  }
+  async function chatFetchGroupMessages(initial){
+    if(chatMode !== 'groups' || !chatActiveGroupId) return;
+    try{
+      let url = '/api/groups/' + chatActiveGroupId + '/messages';
+      if(chatGroupLastAt && !initial) url += '?since=' + encodeURIComponent(chatGroupLastAt);
+      const res = await fetch(url);
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data.messages.length){ chatAppendMessages(data.messages, 'group'); chatGroupLastAt = data.messages[data.messages.length - 1].at; }
+    }catch(e){ /* offline — try again next poll */ }
+  }
+  async function chatGroupAddMember(id){
+    const username = prompt('Add which username to this group?');
+    if(!username) return;
+    try{
+      const res = await fetch('/api/groups/' + id + '/members', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+      const data = await res.json();
+      if(!res.ok){ showToast(data.error || 'Could not add member'); return; }
+      showToast('Added ' + username);
+      await chatLoadGroups();
+      chatSelectGroup(id);
+    }catch(e){ showToast('Could not reach the server'); }
+  }
+  async function chatGroupLeave(id){
+    const group = chatGroups.find(g => g.id === id);
+    if(!group) return;
+    const isOwner = group.owner === currentUser.username;
+    if(!confirm(isOwner ? 'Delete this group for everyone?' : 'Leave this group?')) return;
+    try{
+      const res = isOwner
+        ? await fetch('/api/groups/' + id, { method:'DELETE' })
+        : await fetch('/api/groups/' + id + '/members/' + encodeURIComponent(currentUser.username), { method:'DELETE' });
+      const data = await res.json();
+      if(!res.ok){ showToast(data.error || 'Could not leave group'); return; }
+      chatActiveGroupId = null;
+      showToast(isOwner ? 'Group deleted' : 'Left group');
+      chatLoadGroups();
+    }catch(e){ showToast('Could not reach the server'); }
+  }
+
   setInterval(() => {
     const w = document.getElementById('win-chat');
-    if(w && w.classList.contains('open')) chatFetchMessages(false);
+    if(!w || !w.classList.contains('open')) return;
+    if(chatMode === 'direct') chatFetchMessages(false);
+    else if(chatMode === 'public') chatFetchPublic(false);
+    else if(chatMode === 'groups') chatFetchGroupMessages(false);
   }, 3000);
 
   /* ================= BANK ================= */
@@ -3985,9 +4272,106 @@
     if(w && w.classList.contains('open')) bankLoad();
   }, 6000);
 
+  /* ================= FIREWALL / ANTIVIRUS (App Store security apps) ================= */
+  // GUI front-ends for the same /api/hack/* endpoints the Terminal's
+  // secure/firewall/antivirus/avscan commands use — install/uninstall each
+  // independently from the App Store like any other optional app.
+  const MODULE_OPTIONS = ['ratelimiter', 'sentinel', 'decoy'];
+
+  async function fwLoad(){
+    try{
+      const res = await fetch('/api/hack/status');
+      if(!res.ok) return;
+      const data = await res.json();
+      const sec = data.security;
+      document.getElementById('fwLevel').textContent = sec.firewall + '/5';
+      document.getElementById('fwUpgradeBtn').disabled = sec.firewall >= 5;
+      document.getElementById('fwUpgradeBtn').textContent = sec.firewall >= 5 ? 'Maxed' : 'Upgrade';
+      document.getElementById('fwPorts').innerHTML = sec.ports.map(p => {
+        const current = sec.modules[p] || '';
+        return '<div class="sec-port-row"><span>Port ' + p + '</span>' +
+          '<select onchange="fwSecure(' + p + ', this.value)">' +
+          '<option value="" ' + (current ? '' : 'selected') + '>none</option>' +
+          MODULE_OPTIONS.map(m => '<option value="' + m + '" ' + (current === m ? 'selected' : '') + '>' + m + '</option>').join('') +
+          '</select></div>';
+      }).join('');
+    }catch(e){ /* offline — leave the last known state up */ }
+  }
+  async function fwUpgrade(){
+    try{
+      const res = await fetch('/api/hack/firewall/upgrade', { method:'POST' });
+      const data = await res.json();
+      if(!res.ok){ document.getElementById('fwError').textContent = data.error || 'Upgrade failed'; return; }
+      document.getElementById('fwError').textContent = '';
+      showToast('Firewall upgraded to ' + data.firewall + '/5');
+      fwLoad(); bankLoad();
+    }catch(e){ document.getElementById('fwError').textContent = 'Could not reach the server.'; }
+  }
+  async function fwSecure(port, module){
+    if(!module) return; // "none" selected — nothing installed there yet, no downgrade endpoint
+    try{
+      const res = await fetch('/api/hack/secure', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ port, module }) });
+      const data = await res.json();
+      if(!res.ok){ document.getElementById('fwError').textContent = data.error || 'Could not install module'; fwLoad(); return; }
+      document.getElementById('fwError').textContent = '';
+      showToast('Port ' + port + ' now running ' + module);
+      fwLoad(); bankLoad();
+    }catch(e){ document.getElementById('fwError').textContent = 'Could not reach the server.'; }
+  }
+
+  async function avLoad(){
+    try{
+      const res = await fetch('/api/hack/status');
+      if(!res.ok) return;
+      const data = await res.json();
+      const sec = data.security;
+      document.getElementById('avLevel').textContent = sec.antivirus + '/5';
+      document.getElementById('avUpgradeBtn').disabled = sec.antivirus >= 5;
+      document.getElementById('avUpgradeBtn').textContent = sec.antivirus >= 5 ? 'Maxed' : 'Upgrade';
+      const banner = document.getElementById('avRansomBanner');
+      if(sec.ransom){
+        banner.style.display = 'flex';
+        banner.innerHTML = '<span>Locked by ransomware from <b>' + escapeHtml(sec.ransom.by) + '</b> — demanding ' + bankFormatMoney(sec.ransom.amount) + '.</span><button onclick="avPayRansom()">Pay ransom</button>';
+      } else {
+        banner.style.display = 'none'; banner.innerHTML = '';
+      }
+      const el = document.getElementById('avInfections');
+      if(!sec.infections.length){ el.innerHTML = '<div class="bank-empty">No infections found</div>'; return; }
+      el.innerHTML = sec.infections.map(i => '<div class="sec-infection-row"><span>' + escapeHtml(i.malware ? i.malware.name : i.malwareId) + '<small>installed by ' + escapeHtml(i.by) + '</small></span></div>').join('');
+    }catch(e){ /* offline */ }
+  }
+  async function avUpgrade(){
+    try{
+      const res = await fetch('/api/hack/antivirus/upgrade', { method:'POST' });
+      const data = await res.json();
+      if(!res.ok){ showToast(data.error || 'Upgrade failed'); return; }
+      showToast('Antivirus upgraded to ' + data.antivirus + '/5');
+      avLoad(); bankLoad();
+    }catch(e){ showToast('Could not reach the server.'); }
+  }
+  async function avScan(){
+    try{
+      const res = await fetch('/api/hack/avscan', { method:'POST' });
+      const data = await res.json();
+      if(!res.ok){ showToast(data.error || 'Scan failed'); return; }
+      showToast(data.removed.length ? ('Removed ' + data.removed.length + ' infection(s)') : 'No infections removed');
+      avLoad();
+    }catch(e){ showToast('Could not reach the server.'); }
+  }
+  async function avPayRansom(){
+    await bankPayRansom();
+    avLoad();
+  }
+  setInterval(() => {
+    const fw = document.getElementById('win-firewall');
+    if(fw && fw.classList.contains('open')) fwLoad();
+    const av = document.getElementById('win-antivirus');
+    if(av && av.classList.contains('open')) avLoad();
+  }, 8000);
+
   /* ================= CYBERSECURITY / HACKING (terminal-driven) ================= */
-  // No dedicated window — this plays out entirely through the Terminal, in
-  // keeping with the genre (`scan`, `exploit`, `deploy`, …). A lightweight
+  // Attacking another player (scan/exploit/steal/deploy) stays Terminal-only,
+  // in keeping with the genre (`scan`, `exploit`, `deploy`, …). A lightweight
   // poll keeps players honest about knowing they've been hit even with the
   // Terminal closed, by watching their own security log for new entries.
   let hackLastSeenLogAt = null, hackLastSeenAnnoy = 0, hackStatusPrimed = false;
@@ -4488,7 +4872,7 @@
         printLine(open.length ? open.join(', ') : '(no windows open)');
         break;
       case 'open':
-        if(['settings','browser','files','terminal','test','appstore','ide','writer','sheets','camera','monitor','chat','bank'].includes(arg)){ openApp(arg); printLine('opened ' + arg); }
+        if(['settings','browser','files','terminal','test','appstore','ide','writer','sheets','camera','monitor','chat','bank','firewall','antivirus'].includes(arg)){ openApp(arg); printLine('opened ' + arg); }
         else printLine('open: unknown app "' + escapeHtml(arg) + '"', 'err');
         break;
       case 'close':

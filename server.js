@@ -24,6 +24,9 @@ const KV_DIR = path.join(__dirname, 'data', 'kv');
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const ACTIVITY_FILE = path.join(__dirname, 'data', 'activity.json');
 const CHAT_FILE = path.join(__dirname, 'data', 'chat.json');
+const PUBLIC_CHAT_FILE = path.join(__dirname, 'data', 'public-chat.json');
+const GROUPS_FILE = path.join(__dirname, 'data', 'groups.json');
+const GROUP_MESSAGES_FILE = path.join(__dirname, 'data', 'group-messages.json');
 const BANK_FILE = path.join(__dirname, 'data', 'bank.json');
 const sessions = new Map();
 const startedAt = Date.now();
@@ -76,6 +79,9 @@ function ensureDirs() {
   if (!fs.existsSync(USERS_FILE)) saveUsers([]);
   if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, '[]\n');
   if (!fs.existsSync(CHAT_FILE)) fs.writeFileSync(CHAT_FILE, '[]\n');
+  if (!fs.existsSync(PUBLIC_CHAT_FILE)) fs.writeFileSync(PUBLIC_CHAT_FILE, '[]\n');
+  if (!fs.existsSync(GROUPS_FILE)) fs.writeFileSync(GROUPS_FILE, '[]\n');
+  if (!fs.existsSync(GROUP_MESSAGES_FILE)) fs.writeFileSync(GROUP_MESSAGES_FILE, '[]\n');
   if (!fs.existsSync(BANK_FILE)) fs.writeFileSync(BANK_FILE, '[]\n');
   ensureEconomyFields(loadUsers());
   const primaryHome = path.join(USERFILES_DIR, 'aledeaux');
@@ -179,15 +185,17 @@ function defaultSecurity(user) {
   return { firewall: 1, antivirus: 1, ports: ports.sort((a, b) => a - b), modules: {}, infections: [], log: [], ransom: null };
 }
 
-// Back-fills accounts created before the currency/security system existed
-// (and normalizes anything missing) — called once at boot and safe to call
-// repeatedly since it only fills in gaps.
+// Back-fills accounts created before the currency/security/social systems
+// existed (and normalizes anything missing) — called once at boot and safe
+// to call repeatedly since it only fills in gaps.
 function ensureEconomyFields(users) {
   let changed = false;
   for (const user of users) {
     if (typeof user.balance !== 'number') { user.balance = STARTING_BALANCE; changed = true; }
     if (!user.security) { user.security = defaultSecurity(user); changed = true; }
     if (user.security && !user.security.modules) { user.security.modules = {}; changed = true; }
+    if (!Array.isArray(user.blocked)) { user.blocked = []; changed = true; }
+    if (typeof user.muted !== 'boolean') { user.muted = false; changed = true; }
   }
   if (changed) saveUsers(users);
   return users;
@@ -269,7 +277,7 @@ function saveUsers(users) {
 // uses it (GET /api/users) is already superuser-gated, and every other call
 // site only ever resolves the requester's own record.
 function publicUser(user) {
-  return { id: user.id, username: user.username, role: user.role, active: user.active !== false, createdAt: user.createdAt, balance: typeof user.balance === 'number' ? user.balance : STARTING_BALANCE };
+  return { id: user.id, username: user.username, role: user.role, active: user.active !== false, createdAt: user.createdAt, balance: typeof user.balance === 'number' ? user.balance : STARTING_BALANCE, muted: user.muted === true };
 }
 
 // Re-checks the session against the live user record on every request (rather
@@ -479,7 +487,7 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
   const users = loadUsers();
   const user = users.find(candidate => candidate.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { username, password, role, active, balance } = req.body || {};
+  const { username, password, role, active, balance, muted } = req.body || {};
   if (username !== undefined && !/^[a-zA-Z0-9._-]{2,32}$/.test(String(username).trim())) return res.status(400).json({ error: 'Invalid username' });
   if (username !== undefined && users.some(candidate => candidate.id !== user.id && candidate.username.toLowerCase() === String(username).trim().toLowerCase())) return res.status(409).json({ error: 'Username already exists' });
   if (password !== undefined && String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -489,11 +497,16 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
     if (active === false && user.id === req.user.id) return res.status(400).json({ error: 'You cannot deactivate your own account' });
   }
   if (balance !== undefined && (!Number.isFinite(Number(balance)) || Number(balance) < 0)) return res.status(400).json({ error: 'Balance must be a non-negative number' });
+  if (muted !== undefined) {
+    if (typeof muted !== 'boolean') return res.status(400).json({ error: 'Invalid muted value' });
+    if (muted === true && user.id === req.user.id) return res.status(400).json({ error: 'You cannot mute your own account' });
+  }
   if (username !== undefined) user.username = String(username).trim();
   if (password !== undefined && password !== '') user.passwordHash = hashPassword(password);
   if (role !== undefined) user.role = role;
   if (active !== undefined) user.active = active;
   if (balance !== undefined) user.balance = Math.floor(Number(balance));
+  if (muted !== undefined) user.muted = muted;
   saveUsers(users);
   if (active === false) {
     for (const [token, session] of sessions) if (session.id === user.id) sessions.delete(token);
@@ -502,6 +515,8 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
     recordActivity('user-activated', req.user.username, user.username);
   } else if (balance !== undefined) {
     recordActivity('user-balance-set', req.user.username, user.username + ' -> $' + user.balance);
+  } else if (muted !== undefined) {
+    recordActivity(muted ? 'user-muted' : 'user-unmuted', req.user.username, user.username);
   } else {
     recordActivity('user-updated', req.user.username, user.username);
   }
@@ -534,6 +549,44 @@ app.post('/api/system/reset', (req, res) => {
   }
 });
 
+/* ---------------- content moderation ---------------- */
+/* A deliberately basic, extensible slur filter — whole-word regex matching */
+/* (never a raw substring check) so it can never flag a word that merely    */
+/* contains a banned root, e.g. it must not catch the country/demonym      */
+/* "Niger" / "Nigeria" / "Nigerian" while still catching the slur itself   */
+/* (which needs a doubled "g") and its common leetspeak spellings. Add more */
+/* patterns here as needed — each one gets applied everywhere a chat        */
+/* message (DM, public, or group) gets posted.                              */
+
+const BANNED_PATTERNS = [
+  /\bn[i1!|]+g{2,}[e3]+r+s?\b/i,
+  /\bn[i1!|]+g{2,}[a@4]+z?s?\b/i,
+  /\bf[a4@]g+(o[t7]+)?s?\b/i
+];
+function containsBannedContent(text) {
+  return BANNED_PATTERNS.some(pattern => pattern.test(String(text)));
+}
+
+function isBlockedPair(a, b) {
+  return (a.blocked || []).includes(b.username) || (b.blocked || []).includes(a.username);
+}
+
+// Shared entry point for every chat surface — validates length, the slur
+// filter, and the poster's mute status in one place so DM/public/group
+// messages can never drift out of sync on moderation rules.
+function moderateOutgoingMessage(res, sender, text) {
+  const cleanText = String(text || '').trim();
+  if (!cleanText) { res.status(400).json({ error: 'Message is empty' }); return null; }
+  if (cleanText.length > 4000) { res.status(400).json({ error: 'Message is too long' }); return null; }
+  if (sender.muted) { res.status(403).json({ error: 'You have been muted by a moderator' }); return null; }
+  if (containsBannedContent(cleanText)) {
+    recordActivity('chat-filtered', sender.username, '(message withheld by content filter)');
+    res.status(400).json({ error: 'That message was blocked by the content filter' });
+    return null;
+  }
+  return cleanText;
+}
+
 /* ---------------- chat ---------------- */
 /* Direct messages between users, stored as one flat JSON list under        */
 /* ./data/chat.json — each message tagged with a sorted "conversation" key  */
@@ -553,9 +606,11 @@ function conversationKey(a, b) {
 }
 
 app.get('/api/chat/contacts', requireAuth, (req, res) => {
-  const contacts = loadUsers()
+  const users = loadUsers();
+  const me = users.find(user => user.id === req.user.id);
+  const contacts = users
     .filter(user => user.id !== req.user.id)
-    .map(user => ({ id: user.id, username: user.username, active: user.active !== false }));
+    .map(user => ({ id: user.id, username: user.username, active: user.active !== false, blocked: (me.blocked || []).includes(user.username) }));
   res.json({ contacts });
 });
 
@@ -570,13 +625,15 @@ app.get('/api/chat/messages', requireAuth, (req, res) => {
 
 app.post('/api/chat/messages', requireAuth, (req, res) => {
   const { to, text } = req.body || {};
-  const recipient = loadUsers().find(user => user.username === String(to || ''));
+  const users = loadUsers();
+  const sender = users.find(user => user.id === req.user.id);
+  const recipient = users.find(user => user.username === String(to || ''));
   if (!recipient) return res.status(404).json({ error: 'User not found' });
   if (recipient.id === req.user.id) return res.status(400).json({ error: "You can't message yourself" });
   if (recipient.active === false) return res.status(400).json({ error: 'That user is deactivated' });
-  const cleanText = String(text || '').trim();
-  if (!cleanText) return res.status(400).json({ error: 'Message is empty' });
-  if (cleanText.length > 4000) return res.status(400).json({ error: 'Message is too long' });
+  if (isBlockedPair(sender, recipient)) return res.status(403).json({ error: 'You can\'t message this user — one of you has blocked the other' });
+  const cleanText = moderateOutgoingMessage(res, sender, text);
+  if (cleanText === null) return;
   const message = {
     id: crypto.randomUUID(),
     conversation: conversationKey(req.user.username, recipient.username),
@@ -590,6 +647,211 @@ app.post('/api/chat/messages', requireAuth, (req, res) => {
   saveChat(messages);
   recordActivity('chat-message', req.user.username, 'to ' + recipient.username);
   res.status(201).json({ message });
+});
+
+app.delete('/api/chat/messages/:id', requireAuth, (req, res) => {
+  const messages = readChat();
+  const message = messages.find(m => m.id === req.params.id);
+  if (!message) return res.status(404).json({ error: 'Message not found' });
+  if (message.from !== req.user.username && req.user.role !== 'superuser') return res.status(403).json({ error: 'You can only delete your own messages' });
+  saveChat(messages.filter(m => m.id !== message.id));
+  if (req.user.role === 'superuser' && message.from !== req.user.username) recordActivity('chat-message-deleted', req.user.username, 'DM from ' + message.from);
+  res.json({ deleted: true });
+});
+
+/* ---------------- blocking ---------------- */
+
+app.get('/api/social/blocked', requireAuth, (req, res) => {
+  const user = loadUsers().find(candidate => candidate.id === req.user.id);
+  res.json({ blocked: user.blocked || [] });
+});
+
+app.post('/api/social/block', requireAuth, (req, res) => {
+  const { username } = req.body || {};
+  const users = loadUsers();
+  const user = users.find(candidate => candidate.id === req.user.id);
+  const target = users.find(candidate => candidate.username === String(username || ''));
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === user.id) return res.status(400).json({ error: "You can't block yourself" });
+  user.blocked = user.blocked || [];
+  if (!user.blocked.includes(target.username)) user.blocked.push(target.username);
+  saveUsers(users);
+  res.json({ blocked: user.blocked });
+});
+
+app.post('/api/social/unblock', requireAuth, (req, res) => {
+  const { username } = req.body || {};
+  const users = loadUsers();
+  const user = users.find(candidate => candidate.id === req.user.id);
+  user.blocked = (user.blocked || []).filter(name => name !== String(username || ''));
+  saveUsers(users);
+  res.json({ blocked: user.blocked });
+});
+
+/* ---------------- public chat ---------------- */
+/* One shared, server-wide room — every active account can read and post.  */
+
+function readPublicChat() {
+  try { return JSON.parse(fs.readFileSync(PUBLIC_CHAT_FILE, 'utf8')); } catch (e) { return []; }
+}
+function savePublicChat(messages) {
+  fs.writeFileSync(PUBLIC_CHAT_FILE, JSON.stringify(messages.slice(-2000), null, 2) + '\n');
+}
+
+app.get('/api/chat/public', requireAuth, (req, res) => {
+  let messages = readPublicChat();
+  if (req.query.since) messages = messages.filter(message => message.at > String(req.query.since));
+  res.json({ messages: messages.slice(-200) });
+});
+
+app.post('/api/chat/public', requireAuth, (req, res) => {
+  const users = loadUsers();
+  const sender = users.find(user => user.id === req.user.id);
+  const cleanText = moderateOutgoingMessage(res, sender, req.body && req.body.text);
+  if (cleanText === null) return;
+  const message = { id: crypto.randomUUID(), from: sender.username, text: cleanText, at: new Date().toISOString() };
+  const messages = readPublicChat();
+  messages.push(message);
+  savePublicChat(messages);
+  recordActivity('public-chat-message', sender.username);
+  res.status(201).json({ message });
+});
+
+app.delete('/api/chat/public/:id', requireAuth, (req, res) => {
+  const messages = readPublicChat();
+  const message = messages.find(m => m.id === req.params.id);
+  if (!message) return res.status(404).json({ error: 'Message not found' });
+  if (message.from !== req.user.username && req.user.role !== 'superuser') return res.status(403).json({ error: 'You can only delete your own messages' });
+  savePublicChat(messages.filter(m => m.id !== message.id));
+  if (req.user.role === 'superuser' && message.from !== req.user.username) recordActivity('public-chat-message-deleted', req.user.username, 'from ' + message.from);
+  res.json({ deleted: true });
+});
+
+/* ---------------- private groups ---------------- */
+
+function readGroups() {
+  try { return JSON.parse(fs.readFileSync(GROUPS_FILE, 'utf8')); } catch (e) { return []; }
+}
+function saveGroups(groups) {
+  fs.writeFileSync(GROUPS_FILE, JSON.stringify(groups, null, 2) + '\n');
+}
+function readGroupMessages() {
+  try { return JSON.parse(fs.readFileSync(GROUP_MESSAGES_FILE, 'utf8')); } catch (e) { return []; }
+}
+function saveGroupMessages(messages) {
+  fs.writeFileSync(GROUP_MESSAGES_FILE, JSON.stringify(messages.slice(-10000), null, 2) + '\n');
+}
+function canSeeGroup(group, username, role) {
+  return role === 'superuser' || group.members.includes(username);
+}
+
+app.get('/api/groups', requireAuth, (req, res) => {
+  const groups = readGroups().filter(group => group.members.includes(req.user.username));
+  res.json({ groups });
+});
+
+app.get('/api/groups/all', requireAuth, requireSuperuser, (req, res) => {
+  res.json({ groups: readGroups() });
+});
+
+app.post('/api/groups', requireAuth, (req, res) => {
+  const { name, members } = req.body || {};
+  const cleanName = String(name || '').trim().slice(0, 60);
+  if (!cleanName) return res.status(400).json({ error: 'Give the group a name' });
+  const users = loadUsers();
+  const memberNames = new Set([req.user.username]);
+  for (const candidate of Array.isArray(members) ? members : []) {
+    const match = users.find(user => user.username === String(candidate).trim());
+    if (match) memberNames.add(match.username);
+  }
+  const group = {
+    id: crypto.randomUUID(),
+    name: cleanName,
+    owner: req.user.username,
+    members: [...memberNames],
+    createdAt: new Date().toISOString()
+  };
+  const groups = readGroups();
+  groups.push(group);
+  saveGroups(groups);
+  recordActivity('group-created', req.user.username, cleanName);
+  res.status(201).json({ group });
+});
+
+app.delete('/api/groups/:id', requireAuth, (req, res) => {
+  const groups = readGroups();
+  const group = groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  if (group.owner !== req.user.username && req.user.role !== 'superuser') return res.status(403).json({ error: 'Only the group owner can delete it' });
+  saveGroups(groups.filter(g => g.id !== group.id));
+  saveGroupMessages(readGroupMessages().filter(m => m.groupId !== group.id));
+  recordActivity('group-deleted', req.user.username, group.name);
+  res.json({ deleted: true });
+});
+
+app.post('/api/groups/:id/members', requireAuth, (req, res) => {
+  const { username } = req.body || {};
+  const groups = readGroups();
+  const group = groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  if (group.owner !== req.user.username && req.user.role !== 'superuser') return res.status(403).json({ error: 'Only the group owner can add members' });
+  const match = loadUsers().find(user => user.username === String(username || ''));
+  if (!match) return res.status(404).json({ error: 'User not found' });
+  if (!group.members.includes(match.username)) group.members.push(match.username);
+  saveGroups(groups);
+  res.json({ group });
+});
+
+app.delete('/api/groups/:id/members/:username', requireAuth, (req, res) => {
+  const groups = readGroups();
+  const group = groups.find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  const isSelf = req.params.username === req.user.username;
+  if (!isSelf && group.owner !== req.user.username && req.user.role !== 'superuser') return res.status(403).json({ error: 'Only the group owner can remove other members' });
+  if (req.params.username === group.owner && !isSelf) return res.status(400).json({ error: "Can't remove the group owner" });
+  group.members = group.members.filter(name => name !== req.params.username);
+  if (group.members.length === 0) {
+    saveGroups(groups.filter(g => g.id !== group.id));
+    saveGroupMessages(readGroupMessages().filter(m => m.groupId !== group.id));
+    return res.json({ deleted: true });
+  }
+  saveGroups(groups);
+  res.json({ group });
+});
+
+app.get('/api/groups/:id/messages', requireAuth, (req, res) => {
+  const group = readGroups().find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  if (!canSeeGroup(group, req.user.username, req.user.role)) return res.status(403).json({ error: 'You are not a member of this group' });
+  let messages = readGroupMessages().filter(m => m.groupId === group.id);
+  if (req.query.since) messages = messages.filter(message => message.at > String(req.query.since));
+  res.json({ messages: messages.slice(-200) });
+});
+
+app.post('/api/groups/:id/messages', requireAuth, (req, res) => {
+  const group = readGroups().find(g => g.id === req.params.id);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  if (!group.members.includes(req.user.username)) return res.status(403).json({ error: 'You are not a member of this group' });
+  const users = loadUsers();
+  const sender = users.find(user => user.id === req.user.id);
+  const cleanText = moderateOutgoingMessage(res, sender, req.body && req.body.text);
+  if (cleanText === null) return;
+  const message = { id: crypto.randomUUID(), groupId: group.id, from: sender.username, text: cleanText, at: new Date().toISOString() };
+  const messages = readGroupMessages();
+  messages.push(message);
+  saveGroupMessages(messages);
+  res.status(201).json({ message });
+});
+
+app.delete('/api/groups/:groupId/messages/:msgId', requireAuth, (req, res) => {
+  const group = readGroups().find(g => g.id === req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  const messages = readGroupMessages();
+  const message = messages.find(m => m.id === req.params.msgId && m.groupId === group.id);
+  if (!message) return res.status(404).json({ error: 'Message not found' });
+  if (message.from !== req.user.username && group.owner !== req.user.username && req.user.role !== 'superuser') return res.status(403).json({ error: "You can't delete this message" });
+  saveGroupMessages(messages.filter(m => m.id !== message.id));
+  res.json({ deleted: true });
 });
 
 /* ---------------- bank / currency ---------------- */

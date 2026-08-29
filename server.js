@@ -1411,6 +1411,12 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
+// Bind explicitly to all interfaces (0.0.0.0) rather than relying on
+// Node's default — in some containerized/proxied environments (Codespaces'
+// devcontainer network is one) the default binding can end up on an
+// interface the port-forwarding proxy doesn't actually reach, so the
+// process shows as running and the port shows as forwarded while requests
+// still 404 at the proxy.
+app.listen(PORT, '0.0.0.0', () => {
   console.log('Aegis OS running at http://localhost:' + PORT);
 });

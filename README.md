@@ -25,7 +25,9 @@ Then open http://localhost:3000
 - **User accounts** are stored under `./data/users.json`. There's no seeded
   default account — the boot screen is a self-service Sign Up / Sign In pair,
   and the very first account ever created becomes the superuser. Superusers
-  can add, modify, deactivate, or remove other accounts from Settings > Users.
+  can add, modify, deactivate, remove, or set the currency balance of other
+  accounts from Settings > Users (or `setbalance <user> <amount>` in the
+  Terminal) — handy for correcting an exploited bug or just moderating.
 - **Files app / Terminal** read and write actual files under
   `./userfiles/<username>/` on this machine. Each account has its own home;
   delete something in Files, it's gone from disk. Create a file in Terminal,

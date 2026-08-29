@@ -1950,7 +1950,7 @@
         const toggleBtn = !isSelf
           ? '<button class="mini-btn' + (user.active === false ? '' : ' danger') + '" onclick="toggleUserActive(\'' + escapeAttr(user.id) + '\', ' + (user.active === false) + ')">' + (user.active === false ? 'Reactivate' : 'Deactivate') + '</button>'
           : '';
-        return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + '</div>' + statusBadge + '</div>' +
+        return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + ' · $' + user.balance.toLocaleString() + '</div>' + statusBadge + '</div>' +
           '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' + toggleBtn +
           '<button class="mini-btn danger" onclick="deleteUser(\'' + escapeAttr(user.id) + '\')">Remove</button></div></div>';
       }).join('');
@@ -1981,7 +1981,14 @@
     if(password === null) return;
     const role = prompt('Role: user or superuser (leave blank to keep current):');
     if(role === null) return;
+    const balanceInput = prompt('Set balance to (leave blank to keep current):');
+    if(balanceInput === null) return;
     const body = {}; if(username) body.username = username; if(password) body.password = password; if(role) body.role = role;
+    if(balanceInput.trim() !== ''){
+      const balance = Number(balanceInput);
+      if(!Number.isFinite(balance) || balance < 0){ showUserError('Balance must be a non-negative number'); return; }
+      body.balance = balance;
+    }
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     const data = await res.json();
     if(!res.ok){ showUserError(data.error); return; }
@@ -4153,6 +4160,23 @@
       bankLoad();
     }catch(e){ printLine('transfer: could not reach the server', 'err'); }
   }
+  async function termSetBalance(username, amountStr){
+    if(currentUser.role !== 'superuser'){ printLine('setbalance: superuser access required', 'err'); return; }
+    const amount = Number(amountStr);
+    if(!username || !Number.isFinite(amount) || amount < 0){ printLine('usage: setbalance &lt;username&gt; &lt;amount&gt;', 'err'); return; }
+    try{
+      const usersRes = await fetch('/api/users');
+      const usersData = await usersRes.json();
+      if(!usersRes.ok){ printLine('setbalance: ' + (usersData.error || 'failed'), 'err'); return; }
+      const target = usersData.users.find(u => u.username === username);
+      if(!target){ printLine('setbalance: user "' + escapeHtml(username) + '" not found', 'err'); return; }
+      const res = await fetch('/api/users/' + encodeURIComponent(target.id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ balance: amount }) });
+      const data = await res.json();
+      if(!res.ok){ printLine('setbalance: ' + (data.error || 'failed'), 'err'); return; }
+      printLine(escapeHtml(username) + '\'s balance set to ' + bankFormatMoney(data.user.balance) + '.');
+      bankLoad();
+    }catch(e){ printLine('setbalance: could not reach the server', 'err'); }
+  }
   async function termPayRansom(){
     try{
       const res = await fetch('/api/bank/pay-ransom', { method:'POST' });
@@ -4379,7 +4403,8 @@
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">steal</span>, <span class="prompt">deploy &lt;malware&gt;</span>, <span class="prompt">avscan</span>, <span class="prompt">secstatus</span>, <span class="prompt">dossier &lt;user&gt;</span>, <span class="prompt">malware</span> — malware catalog<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;</span> ($150) — install your own defense module<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span> — smaller, general-purpose edge<br>' +
-          '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span>'
+          '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span><br>' +
+          '&nbsp;&nbsp;<b>Superuser</b> — <span class="prompt">setbalance &lt;user&gt; &lt;amount&gt;</span> — also available from Settings &gt; Users &gt; Edit'
         );
         break;
       case 'whoami': printLine('user (standard account)'); break;
@@ -4513,6 +4538,7 @@
       case 'wallet': case 'balance': termWallet(); break;
       case 'transfer': termTransfer(parts[1], parts[2]); break;
       case 'payransom': termPayRansom(); break;
+      case 'setbalance': termSetBalance(parts[1], parts[2]); break;
       default:
         printLine(escapeHtml(base) + ': command not found — try <span class="prompt">help</span>', 'err');
     }

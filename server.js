@@ -265,8 +265,11 @@ function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2) + '\n');
 }
 
+// Safe everywhere publicUser() is used: the only multi-user listing that
+// uses it (GET /api/users) is already superuser-gated, and every other call
+// site only ever resolves the requester's own record.
 function publicUser(user) {
-  return { id: user.id, username: user.username, role: user.role, active: user.active !== false, createdAt: user.createdAt };
+  return { id: user.id, username: user.username, role: user.role, active: user.active !== false, createdAt: user.createdAt, balance: typeof user.balance === 'number' ? user.balance : STARTING_BALANCE };
 }
 
 // Re-checks the session against the live user record on every request (rather
@@ -476,7 +479,7 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
   const users = loadUsers();
   const user = users.find(candidate => candidate.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { username, password, role, active } = req.body || {};
+  const { username, password, role, active, balance } = req.body || {};
   if (username !== undefined && !/^[a-zA-Z0-9._-]{2,32}$/.test(String(username).trim())) return res.status(400).json({ error: 'Invalid username' });
   if (username !== undefined && users.some(candidate => candidate.id !== user.id && candidate.username.toLowerCase() === String(username).trim().toLowerCase())) return res.status(409).json({ error: 'Username already exists' });
   if (password !== undefined && String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -485,16 +488,20 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
     if (typeof active !== 'boolean') return res.status(400).json({ error: 'Invalid active value' });
     if (active === false && user.id === req.user.id) return res.status(400).json({ error: 'You cannot deactivate your own account' });
   }
+  if (balance !== undefined && (!Number.isFinite(Number(balance)) || Number(balance) < 0)) return res.status(400).json({ error: 'Balance must be a non-negative number' });
   if (username !== undefined) user.username = String(username).trim();
   if (password !== undefined && password !== '') user.passwordHash = hashPassword(password);
   if (role !== undefined) user.role = role;
   if (active !== undefined) user.active = active;
+  if (balance !== undefined) user.balance = Math.floor(Number(balance));
   saveUsers(users);
   if (active === false) {
     for (const [token, session] of sessions) if (session.id === user.id) sessions.delete(token);
     recordActivity('user-deactivated', req.user.username, user.username);
   } else if (active === true) {
     recordActivity('user-activated', req.user.username, user.username);
+  } else if (balance !== undefined) {
+    recordActivity('user-balance-set', req.user.username, user.username + ' -> $' + user.balance);
   } else {
     recordActivity('user-updated', req.user.username, user.username);
   }

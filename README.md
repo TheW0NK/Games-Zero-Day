@@ -22,9 +22,10 @@ Then open http://localhost:3000
 
 ## What's actually real now (vs. the browser-only version)
 
-- **User accounts** are stored under `./data/users.json`. The initial
-  superuser is `aledeaux` with password `passwood`; only superusers can add,
-  modify, or remove accounts. Sign in from the Aegis lock screen.
+- **User accounts** are stored under `./data/users.json`. There's no seeded
+  default account — the boot screen is a self-service Sign Up / Sign In pair,
+  and the very first account ever created becomes the superuser. Superusers
+  can add, modify, deactivate, or remove other accounts from Settings > Users.
 - **Files app / Terminal** read and write actual files under
   `./userfiles/<username>/` on this machine. Each account has its own home;
   delete something in Files, it's gone from disk. Create a file in Terminal,
@@ -61,10 +62,10 @@ Then open http://localhost:3000
 - **Music Player** plays only the real `.mp3` files in each user's `Music`
   folder — add songs there from the Files app, the player's own upload
   button, or the Terminal, and they show up in the playlist.
-- **System setup** runs in its own full-screen layer after POST and before the
-  loading bar when `needs_setup` is true. It covers installation, date/time,
-  telemetry, administrator creation, and final preferences. Completing setup
-  persists the flag as false; a system reset removes it and shows setup again.
+- **Sign Up / Sign In** — after boot, a non-`HttpOnly` `aegis_known_device`
+  cookie (set on any successful login or signup) decides which screen shows:
+  no cookie routes to Sign Up, an existing one routes to Sign In. Logging out
+  doesn't clear it, so a returning device keeps landing on Sign In.
 - **BIOS setup** is available only by pressing a key during the textual POST
   screen. Recovery also includes non-destructive diagnostics and boot-log
   viewing.

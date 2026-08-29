@@ -65,9 +65,7 @@ function ensureDirs() {
   if (fs.readdirSync(USERFILES_DIR).length === 0) {
     writeTreeToDisk(defaultTree(), USERFILES_DIR);
   }
-  if (!fs.existsSync(USERS_FILE)) {
-    saveUsers([{ id: crypto.randomUUID(), username: 'aledeaux', passwordHash: hashPassword('passwood'), role: 'superuser', createdAt: new Date().toISOString() }]);
-  }
+  if (!fs.existsSync(USERS_FILE)) saveUsers([]);
   if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, '[]\n');
   if (!fs.existsSync(CHAT_FILE)) fs.writeFileSync(CHAT_FILE, '[]\n');
   const primaryHome = path.join(USERFILES_DIR, 'aledeaux');
@@ -239,6 +237,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------------- authentication and user management ---------------- */
 
+// The session cookie is the real credential (HttpOnly, never readable by
+// client JS). The second cookie is just a UX signal — "this browser has
+// signed in here before" — so the boot flow can default to Sign In instead
+// of Sign Up; it carries no secret, so it's deliberately readable client-side.
+const KNOWN_DEVICE_COOKIE = 'aegis_known_device';
+const KNOWN_DEVICE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year, in seconds
+
+function setAuthCookies(res, token) {
+  res.setHeader('Set-Cookie', [
+    `aegis_session=${token}; HttpOnly; SameSite=Lax; Path=/`,
+    `${KNOWN_DEVICE_COOKIE}=1; SameSite=Lax; Path=/; Max-Age=${KNOWN_DEVICE_MAX_AGE}`
+  ]);
+}
+
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   const user = loadUsers().find(candidate => candidate.username === String(username || ''));
@@ -247,7 +259,7 @@ app.post('/api/auth/login', (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, publicUser(user));
   recordActivity('login', user.username);
-  res.setHeader('Set-Cookie', `aegis_session=${token}; HttpOnly; SameSite=Lax; Path=/`);
+  setAuthCookies(res, token);
   res.json({ user: publicUser(user) });
 });
 
@@ -256,41 +268,32 @@ app.post('/api/auth/logout', (req, res) => {
   const sessionUser = token && sessions.get(token);
   if (token) sessions.delete(token);
   if (sessionUser) recordActivity('logout', sessionUser.username);
+  // the known-device cookie is deliberately left alone on logout — this
+  // browser still belongs to someone with an account here, so it should
+  // still land back on Sign In, not Sign Up.
   res.setHeader('Set-Cookie', 'aegis_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
   res.json({ ok: true });
 });
 
 app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user }));
 
-function setupRequired() {
-  try {
-    const saved = JSON.parse(fs.readFileSync(kvPath('needs_setup'), 'utf8'));
-    const value = saved && typeof saved === 'object' ? saved.value : saved;
-    return value !== 'false' && value !== false;
-  } catch (e) { return true; }
-}
-
-app.get('/api/setup/status', (req, res) => res.json({ needs_setup: setupRequired() }));
-
-app.post('/api/setup/complete', (req, res) => {
-  if (!setupRequired()) return res.status(409).json({ error: 'System setup is already complete' });
-  const { username, password, timezone, telemetry, settings } = req.body || {};
+// Self-service registration — the first account ever created on a fresh
+// instance becomes the superuser, everyone after that is a regular user.
+app.post('/api/auth/signup', (req, res) => {
+  const { username, password } = req.body || {};
   const cleanName = String(username || '').trim();
-  if (!/^[a-zA-Z0-9._-]{2,32}$/.test(cleanName) || String(password || '').length < 6) return res.status(400).json({ error: 'Create an admin username and a password of at least 6 characters' });
+  if (!/^[a-zA-Z0-9._-]{2,32}$/.test(cleanName) || String(password || '').length < 6) return res.status(400).json({ error: 'Choose a username and a password of at least 6 characters' });
   const users = loadUsers();
-  const existing = users.find(user => user.username.toLowerCase() === cleanName.toLowerCase());
-  if (existing) {
-    existing.username = cleanName;
-    existing.passwordHash = hashPassword(password);
-    existing.role = 'superuser';
-  } else {
-    users.push({ id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role: 'superuser', createdAt: new Date().toISOString() });
-  }
+  if (users.some(user => user.username.toLowerCase() === cleanName.toLowerCase())) return res.status(409).json({ error: 'That username is taken' });
+  const role = users.length === 0 ? 'superuser' : 'user';
+  const user = { id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString() };
+  users.push(user);
   saveUsers(users);
-  fs.writeFileSync(kvPath('needs_setup'), 'false');
-  fs.writeFileSync(kvPath('system-setup'), JSON.stringify({ timezone: timezone || 'UTC', telemetry: telemetry !== false, settings: settings || {} }));
-  recordActivity('system-setup', cleanName, 'initial installation complete');
-  res.json({ ok: true });
+  recordActivity('signup', cleanName, role === 'superuser' ? 'first account — superuser' : '');
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, publicUser(user));
+  setAuthCookies(res, token);
+  res.status(201).json({ user: publicUser(user) });
 });
 
 app.put('/api/auth/profile', requireAuth, (req, res) => {
@@ -326,13 +329,11 @@ app.put('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
   const { username, password, role, active } = req.body || {};
   if (username !== undefined && !/^[a-zA-Z0-9._-]{2,32}$/.test(String(username).trim())) return res.status(400).json({ error: 'Invalid username' });
-  if (user.username === 'aledeaux' && username !== undefined && String(username).trim() !== 'aledeaux') return res.status(400).json({ error: 'The primary superuser username cannot be changed' });
   if (username !== undefined && users.some(candidate => candidate.id !== user.id && candidate.username.toLowerCase() === String(username).trim().toLowerCase())) return res.status(409).json({ error: 'Username already exists' });
   if (password !== undefined && String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
   if (role !== undefined && !['user', 'superuser'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
   if (active !== undefined) {
     if (typeof active !== 'boolean') return res.status(400).json({ error: 'Invalid active value' });
-    if (active === false && user.username === 'aledeaux') return res.status(400).json({ error: 'The primary superuser cannot be deactivated' });
     if (active === false && user.id === req.user.id) return res.status(400).json({ error: 'You cannot deactivate your own account' });
   }
   if (username !== undefined) user.username = String(username).trim();
@@ -355,7 +356,7 @@ app.delete('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
   const users = loadUsers();
   const user = users.find(candidate => candidate.id === req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  if (user.id === req.user.id || user.username === 'aledeaux') return res.status(400).json({ error: 'The primary superuser cannot be removed' });
+  if (user.id === req.user.id) return res.status(400).json({ error: 'You cannot remove your own account' });
   saveUsers(users.filter(candidate => candidate.id !== user.id));
   fs.rmSync(path.join(USERFILES_DIR, user.username), { recursive: true, force: true });
   recordActivity('user-removed', req.user.username, user.username);

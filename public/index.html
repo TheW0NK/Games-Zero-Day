@@ -2104,11 +2104,22 @@
   }
 
   /* ---- WINDOW MANAGEMENT ---- */
-  let zTop = 10;
+  const Z_BASE = 10, Z_CEILING = 45; // stay below the taskbar's z-index:50
+  let zTop = Z_BASE;
   let focusedWindowId = null;
 
   function bringFront(id){
-    zTop = Math.min(zTop + 1, 45);
+    if(zTop >= Z_CEILING){
+      // Every window has been focused enough times to reach the ceiling —
+      // renumber all windows by their current relative stacking order back
+      // down to the base instead of just freezing further clicks at the
+      // ceiling (which silently broke click-to-front once hit).
+      const windows = [...document.querySelectorAll('.window')]
+        .sort((a, b) => (parseInt(a.style.zIndex) || 0) - (parseInt(b.style.zIndex) || 0));
+      windows.forEach((w, i) => { w.style.zIndex = Z_BASE + i; });
+      zTop = Z_BASE + windows.length;
+    }
+    zTop++;
     document.querySelectorAll('.window').forEach(w => w.classList.remove('focused'));
     const w = document.getElementById('win-'+id);
     w.style.zIndex = zTop;

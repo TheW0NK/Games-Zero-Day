@@ -24,8 +24,16 @@ const KV_DIR = path.join(__dirname, 'data', 'kv');
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const ACTIVITY_FILE = path.join(__dirname, 'data', 'activity.json');
 const CHAT_FILE = path.join(__dirname, 'data', 'chat.json');
+const BANK_FILE = path.join(__dirname, 'data', 'bank.json');
 const sessions = new Map();
 const startedAt = Date.now();
+const STARTING_BALANCE = 2500;
+
+// In-memory only — a breach is a live "you're currently inside their
+// system" session, not a fact worth persisting across a server restart.
+// Keyed by attacker user id.
+const activeBreaches = new Map();
+const exploitCooldowns = new Map();
 
 /* ---------------- default starter filesystem ---------------- */
 
@@ -68,6 +76,8 @@ function ensureDirs() {
   if (!fs.existsSync(USERS_FILE)) saveUsers([]);
   if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, '[]\n');
   if (!fs.existsSync(CHAT_FILE)) fs.writeFileSync(CHAT_FILE, '[]\n');
+  if (!fs.existsSync(BANK_FILE)) fs.writeFileSync(BANK_FILE, '[]\n');
+  ensureEconomyFields(loadUsers());
   const primaryHome = path.join(USERFILES_DIR, 'aledeaux');
   if (!fs.existsSync(primaryHome)) {
     fs.mkdirSync(primaryHome, { recursive: true });
@@ -91,6 +101,121 @@ function recordActivity(type, username, detail = '') {
 
 function readActivity() {
   try { return JSON.parse(fs.readFileSync(ACTIVITY_FILE, 'utf8')); } catch (e) { return []; }
+}
+
+/* ---------------- malware catalog ---------------- */
+/* A static reference list — "viruses, trojans, and other malware" a player  */
+/* can buy and deploy against a breached target. `mechanic` is one of a      */
+/* handful of reusable effects (see applyMalwareEffect below); several       */
+/* entries deliberately share a mechanic at different price/tier points so   */
+/* the catalog reads like a real toolkit instead of one-off special cases.   */
+
+const MALWARE_CATALOG = [
+  { id: 'nightcrawler', name: 'Nightcrawler', category: 'virus', tier: 1, cost: 120, mechanic: 'drain', effect: 'Burns 10-18% of the target\'s balance on install.', description: 'A blunt, self-replicating virus that corrupts loose change in the target\'s account the moment it lands.' },
+  { id: 'sepulcher', name: 'Sepulcher', category: 'virus', tier: 3, cost: 550, mechanic: 'drain', effect: 'Burns 30-45% of the target\'s balance on install.', description: 'A destructive wiper virus. Expensive, and it announces itself — but it does real damage on contact.' },
+  { id: 'blightspread', name: 'Blightspread', category: 'worm', tier: 1, cost: 150, mechanic: 'drain', effect: 'Burns 6-10% of the target\'s balance on install.', description: 'A worm that eats a little on the way through every account it touches.' },
+  { id: 'static', name: 'Static', category: 'worm', tier: 2, cost: 300, mechanic: 'weaken', effect: 'Permanently drops the target\'s firewall by 1 level (until they upgrade).', description: 'Self-propagating noise that grinds down a target\'s firewall configuration until it just... stops holding.' },
+  { id: 'wraithdoor', name: 'Wraithdoor', category: 'trojan', tier: 2, cost: 350, mechanic: 'backdoor', effect: 'Future exploit attempts against this target auto-succeed while installed.', description: 'A persistent backdoor trojan disguised as legitimate system software.' },
+  { id: 'deadbolt', name: 'Deadbolt', category: 'trojan', tier: 1, cost: 130, mechanic: 'drain', effect: 'Burns 8-14% of the target\'s balance on install.', description: 'A cheap trojan that pockets whatever it can reach before anyone notices.' },
+  { id: 'botfly', name: 'Botfly', category: 'botnet', tier: 2, cost: 280, mechanic: 'backdoor', effect: 'Future exploit attempts against this target auto-succeed while installed.', description: 'Conscripts the target\'s machine into a botnet, leaving a standing connection back to you.' },
+  { id: 'cryptolock', name: 'Cryptolock', category: 'ransomware', tier: 3, cost: 500, mechanic: 'lockdown', effect: 'Freezes the target\'s outgoing transfers until they pay you or run antivirus.', description: 'Encrypts the target\'s bank account and leaves a ransom note with your name on it.' },
+  { id: 'undertow', name: 'Undertow', category: 'ransomware', tier: 2, cost: 380, mechanic: 'lockdown', effect: 'Freezes the target\'s outgoing transfers until they pay you or run antivirus.', description: 'A cheaper, sloppier ransomware kit — still locks the account down just fine.' },
+  { id: 'nullroot', name: 'Nullroot', category: 'rootkit', tier: 3, cost: 450, mechanic: 'cloak', effect: 'Hides your future intrusions on this target from their security log.', description: 'Buries itself below the filesystem and quietly edits the target\'s security log on your behalf.' },
+  { id: 'hollowman', name: 'Hollowman', category: 'rootkit', tier: 2, cost: 320, mechanic: 'cloak', effect: 'Hides your future intrusions on this target from their security log.', description: 'A lighter-weight rootkit — less thorough than Nullroot, still keeps you off the record.' },
+  { id: 'ghostkey', name: 'Ghostkey', category: 'spyware', tier: 2, cost: 300, mechanic: 'monitor', effect: 'Lets you check this target\'s dossier anytime, no re-scan needed.', description: 'A keylogger and session-watcher that phones your dossier updates home.' },
+  { id: 'whispernet', name: 'Whispernet', category: 'spyware', tier: 1, cost: 180, mechanic: 'monitor', effect: 'Lets you check this target\'s dossier anytime, no re-scan needed.', description: 'A lighter spyware kit for keeping tabs on a target without paying for Ghostkey.' },
+  { id: 'junkstream', name: 'Junkstream', category: 'adware', tier: 1, cost: 60, mechanic: 'nuisance', effect: 'Floods the target with pop-up spam next time they\'re online. Cosmetic.', description: 'Cheap, obnoxious, and mostly harmless — buys you nothing but the satisfaction of annoying someone.' }
+];
+
+function malwareById(id) {
+  return MALWARE_CATALOG.find(m => m.id === id);
+}
+
+/* ---------------- currency & security profile ---------------- */
+
+const PORT_CATALOG = [21, 22, 23, 25, 80, 443, 445, 3306, 3389, 8080];
+
+// Deterministic per-account "open ports" — stable across scans (so recon
+// actually means something) without needing to persist an RNG state.
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seedFromString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+  return hash;
+}
+function defaultSecurity(user) {
+  const rand = mulberry32(seedFromString(user.id));
+  const count = 3 + Math.floor(rand() * 3); // 3-5 open ports
+  const pool = PORT_CATALOG.slice();
+  const ports = [];
+  while (ports.length < count && pool.length) ports.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  return { firewall: 1, antivirus: 1, ports: ports.sort((a, b) => a - b), infections: [], log: [], ransom: null };
+}
+
+// Back-fills accounts created before the currency/security system existed
+// (and normalizes anything missing) — called once at boot and safe to call
+// repeatedly since it only fills in gaps.
+function ensureEconomyFields(users) {
+  let changed = false;
+  for (const user of users) {
+    if (typeof user.balance !== 'number') { user.balance = STARTING_BALANCE; changed = true; }
+    if (!user.security) { user.security = defaultSecurity(user); changed = true; }
+  }
+  if (changed) saveUsers(users);
+  return users;
+}
+
+function readBank() {
+  try { return JSON.parse(fs.readFileSync(BANK_FILE, 'utf8')); } catch (e) { return []; }
+}
+function saveBank(transactions) {
+  fs.writeFileSync(BANK_FILE, JSON.stringify(transactions.slice(-5000), null, 2) + '\n');
+}
+function recordTransaction(from, to, amount, type, note = '') {
+  const transactions = readBank();
+  const entry = { id: crypto.randomUUID(), from, to, amount, type, note, at: new Date().toISOString() };
+  transactions.push(entry);
+  saveBank(transactions);
+  return entry;
+}
+
+// Persists `users` unconditionally — this is where deploy/steal/exploit
+// hand off their in-memory balance and infection mutations to disk, whether
+// or not the log entry itself ends up recorded.
+function recordSecurityLog(users, targetUser, entry) {
+  // A cloak-type infection installed by this same attacker on this same
+  // target suppresses the record — that's the entire point of a rootkit.
+  const cloaked = (targetUser.security.infections || []).some(inf => {
+    const malware = malwareById(inf.malwareId);
+    return malware && malware.mechanic === 'cloak' && inf.by === entry.by;
+  });
+  if (!cloaked || !entry.by) {
+    targetUser.security.log = targetUser.security.log || [];
+    targetUser.security.log.push({ id: crypto.randomUUID(), ...entry, at: new Date().toISOString() });
+    targetUser.security.log = targetUser.security.log.slice(-100);
+  }
+  saveUsers(users);
+}
+
+function publicSecurity(user, { includeSensitive } = {}) {
+  const sec = user.security || defaultSecurity(user);
+  const base = { firewall: sec.firewall, antivirus: sec.antivirus, ports: sec.ports };
+  if (!includeSensitive) return base;
+  return {
+    ...base,
+    infections: (sec.infections || []).map(inf => ({ ...inf, malware: malwareById(inf.malwareId) })),
+    log: (sec.log || []).slice().reverse(),
+    ransom: sec.ransom || null,
+    pendingAnnoy: sec.pendingAnnoy || 0,
+    balance: user.balance
+  };
 }
 
 function userHome(user) {
@@ -286,7 +411,8 @@ app.post('/api/auth/signup', (req, res) => {
   const users = loadUsers();
   if (users.some(user => user.username.toLowerCase() === cleanName.toLowerCase())) return res.status(409).json({ error: 'That username is taken' });
   const role = users.length === 0 ? 'superuser' : 'user';
-  const user = { id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString() };
+  const user = { id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString(), balance: STARTING_BALANCE };
+  user.security = defaultSecurity(user);
   users.push(user);
   saveUsers(users);
   recordActivity('signup', cleanName, role === 'superuser' ? 'first account — superuser' : '');
@@ -317,7 +443,8 @@ app.post('/api/users', requireAuth, requireSuperuser, (req, res) => {
   if (!['user', 'superuser'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
   const users = loadUsers();
   if (users.some(user => user.username.toLowerCase() === cleanName.toLowerCase())) return res.status(409).json({ error: 'Username already exists' });
-  const user = { id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString() };
+  const user = { id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString(), balance: STARTING_BALANCE };
+  user.security = defaultSecurity(user);
   users.push(user); saveUsers(users);
   recordActivity('user-created', req.user.username, cleanName);
   res.status(201).json({ user: publicUser(user) });
@@ -434,6 +561,238 @@ app.post('/api/chat/messages', requireAuth, (req, res) => {
   saveChat(messages);
   recordActivity('chat-message', req.user.username, 'to ' + recipient.username);
   res.status(201).json({ message });
+});
+
+/* ---------------- bank / currency ---------------- */
+
+app.get('/api/bank/account', requireAuth, (req, res) => {
+  const user = loadUsers().find(candidate => candidate.id === req.user.id);
+  const transactions = readBank().filter(t => t.from === user.username || t.to === user.username).slice(-50).reverse();
+  res.json({ balance: user.balance, ransom: (user.security && user.security.ransom) || null, transactions });
+});
+
+app.post('/api/bank/transfer', requireAuth, (req, res) => {
+  const { to, amount, note } = req.body || {};
+  const cleanAmount = Math.floor(Number(amount));
+  const users = loadUsers();
+  const sender = users.find(candidate => candidate.id === req.user.id);
+  const recipient = users.find(candidate => candidate.username === String(to || ''));
+  if (!recipient) return res.status(404).json({ error: 'User not found' });
+  if (recipient.id === sender.id) return res.status(400).json({ error: "You can't transfer to yourself" });
+  if (!Number.isFinite(cleanAmount) || cleanAmount <= 0) return res.status(400).json({ error: 'Enter a valid amount' });
+  if (sender.security && sender.security.ransom) return res.status(403).json({ error: 'Your account is locked by ransomware — pay it or run antivirus first' });
+  if (sender.balance < cleanAmount) return res.status(400).json({ error: 'Insufficient balance' });
+  sender.balance -= cleanAmount;
+  recipient.balance += cleanAmount;
+  saveUsers(users);
+  const entry = recordTransaction(sender.username, recipient.username, cleanAmount, 'transfer', String(note || '').slice(0, 200));
+  recordActivity('bank-transfer', sender.username, 'to ' + recipient.username + ' — $' + cleanAmount);
+  res.status(201).json({ transaction: entry, balance: sender.balance });
+});
+
+app.post('/api/bank/pay-ransom', requireAuth, (req, res) => {
+  const users = loadUsers();
+  const victim = users.find(candidate => candidate.id === req.user.id);
+  const ransom = victim.security && victim.security.ransom;
+  if (!ransom) return res.status(400).json({ error: 'No active ransom on this account' });
+  const attacker = users.find(candidate => candidate.username === ransom.by);
+  if (victim.balance < ransom.amount) return res.status(400).json({ error: "You can't afford the ransom — try antivirus instead" });
+  victim.balance -= ransom.amount;
+  if (attacker) attacker.balance += ransom.amount;
+  victim.security.infections = (victim.security.infections || []).filter(inf => inf.id !== ransom.infectionId);
+  victim.security.ransom = null;
+  saveUsers(users);
+  recordTransaction(victim.username, ransom.by, ransom.amount, 'ransom');
+  recordActivity('ransom-paid', victim.username, 'to ' + ransom.by + ' — $' + ransom.amount);
+  res.json({ ok: true, balance: victim.balance });
+});
+
+/* ---------------- cybersecurity & hacking ---------------- */
+
+app.get('/api/hack/targets', requireAuth, (req, res) => {
+  const targets = loadUsers()
+    .filter(user => user.id !== req.user.id && user.active !== false)
+    .map(user => ({ username: user.username }));
+  res.json({ targets });
+});
+
+app.get('/api/hack/malware', requireAuth, (req, res) => {
+  res.json({ malware: MALWARE_CATALOG });
+});
+
+app.get('/api/hack/status', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const user = users.find(candidate => candidate.id === req.user.id);
+  res.json({ security: publicSecurity(user, { includeSensitive: true }) });
+});
+
+app.get('/api/hack/scan/:username', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const target = users.find(candidate => candidate.username === req.params.username && candidate.active !== false);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === req.user.id) return res.status(400).json({ error: "You can't scan yourself — try secstatus" });
+  res.json({ username: target.username, ...publicSecurity(target) });
+});
+
+function upgradeCost(level) { return level * 250; }
+
+app.post('/api/hack/firewall/upgrade', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const user = users.find(candidate => candidate.id === req.user.id);
+  if (user.security.firewall >= 5) return res.status(400).json({ error: 'Firewall is already at maximum level' });
+  const cost = upgradeCost(user.security.firewall);
+  if (user.balance < cost) return res.status(400).json({ error: 'Not enough funds — need $' + cost });
+  user.balance -= cost;
+  user.security.firewall += 1;
+  saveUsers(users);
+  res.json({ firewall: user.security.firewall, balance: user.balance });
+});
+
+app.post('/api/hack/antivirus/upgrade', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const user = users.find(candidate => candidate.id === req.user.id);
+  if (user.security.antivirus >= 5) return res.status(400).json({ error: 'Antivirus is already at maximum level' });
+  const cost = upgradeCost(user.security.antivirus);
+  if (user.balance < cost) return res.status(400).json({ error: 'Not enough funds — need $' + cost });
+  user.balance -= cost;
+  user.security.antivirus += 1;
+  saveUsers(users);
+  res.json({ antivirus: user.security.antivirus, balance: user.balance });
+});
+
+app.post('/api/hack/exploit', requireAuth, (req, res) => {
+  const { target: targetName } = req.body || {};
+  const users = ensureEconomyFields(loadUsers());
+  const attacker = users.find(candidate => candidate.id === req.user.id);
+  const target = users.find(candidate => candidate.username === String(targetName || '') && candidate.active !== false);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.id === attacker.id) return res.status(400).json({ error: "You can't exploit yourself" });
+  const lastAttempt = exploitCooldowns.get(attacker.id) || 0;
+  if (Date.now() - lastAttempt < 3000) return res.status(429).json({ error: 'Give it a moment before trying again' });
+  exploitCooldowns.set(attacker.id, Date.now());
+
+  const hasBackdoor = (target.security.infections || []).some(inf => {
+    const malware = malwareById(inf.malwareId);
+    return malware && malware.mechanic === 'backdoor' && inf.by === attacker.username;
+  });
+  const chance = hasBackdoor ? 100 : Math.max(5, Math.min(95, 50 + (attacker.security.firewall - target.security.firewall) * 10));
+  const success = Math.random() * 100 < chance;
+
+  if (success) {
+    activeBreaches.set(attacker.id, { target: target.username, expiresAt: Date.now() + 120000 });
+    recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-success' });
+    recordActivity('hack-exploit-success', attacker.username, 'vs ' + target.username);
+    return res.json({ success: true, chance, breachExpiresIn: 120 });
+  }
+  recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-failed' });
+  recordActivity('hack-exploit-failed', attacker.username, 'vs ' + target.username);
+  res.json({ success: false, chance });
+});
+
+function requireActiveBreach(req, res, users) {
+  const breach = activeBreaches.get(req.user.id);
+  if (!breach || breach.expiresAt < Date.now()) {
+    res.status(403).json({ error: 'No active breach — exploit a target first' });
+    return null;
+  }
+  const target = users.find(candidate => candidate.username === breach.target);
+  if (!target) {
+    res.status(404).json({ error: 'Target no longer exists' });
+    return null;
+  }
+  return target;
+}
+
+app.post('/api/hack/steal', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const attacker = users.find(candidate => candidate.id === req.user.id);
+  const target = requireActiveBreach(req, res, users);
+  if (!target) return;
+  const pct = 0.05 + Math.random() * 0.1;
+  const amount = Math.floor(target.balance * pct);
+  target.balance -= amount;
+  attacker.balance += amount;
+  activeBreaches.delete(attacker.id);
+  if (amount > 0) recordTransaction(target.username, attacker.username, amount, 'theft');
+  recordSecurityLog(users, target, { by: attacker.username, action: 'theft', amount });
+  recordActivity('hack-steal', attacker.username, 'from ' + target.username + ' — $' + amount);
+  res.json({ amount, balance: attacker.balance });
+});
+
+app.post('/api/hack/deploy', requireAuth, (req, res) => {
+  const { malwareId } = req.body || {};
+  const malware = malwareById(String(malwareId || ''));
+  if (!malware) return res.status(400).json({ error: 'Unknown malware — check `malware list`' });
+  const users = ensureEconomyFields(loadUsers());
+  const attacker = users.find(candidate => candidate.id === req.user.id);
+  const target = requireActiveBreach(req, res, users);
+  if (!target) return;
+  if (attacker.balance < malware.cost) return res.status(400).json({ error: 'Not enough funds — ' + malware.name + ' costs $' + malware.cost });
+  attacker.balance -= malware.cost;
+  const infection = { id: crypto.randomUUID(), malwareId: malware.id, by: attacker.username, at: new Date().toISOString() };
+  target.security.infections = target.security.infections || [];
+  target.security.infections.push(infection);
+
+  let resultNote = malware.name + ' installed.';
+  if (malware.mechanic === 'drain') {
+    const pct = 0.06 + Math.random() * (malware.tier * 0.1);
+    const amount = Math.floor(target.balance * Math.min(pct, 0.45));
+    target.balance -= amount;
+    attacker.balance += amount;
+    if (amount > 0) recordTransaction(target.username, attacker.username, amount, 'malware:' + malware.id);
+    resultNote += ' Drained $' + amount + '.';
+  } else if (malware.mechanic === 'weaken') {
+    target.security.firewall = Math.max(0, target.security.firewall - 1);
+    resultNote += ' Firewall dropped to ' + target.security.firewall + '.';
+  } else if (malware.mechanic === 'lockdown') {
+    const amount = Math.max(50, Math.floor(target.balance * 0.25));
+    target.security.ransom = { amount, by: attacker.username, infectionId: infection.id };
+    resultNote += ' Account locked — ransom set to $' + amount + '.';
+  } else if (malware.mechanic === 'nuisance') {
+    target.security.pendingAnnoy = (target.security.pendingAnnoy || 0) + 1;
+  }
+  // 'backdoor', 'cloak', and 'monitor' are passive — checked elsewhere
+  // (exploit, recordSecurityLog, and dossier lookups respectively) for as
+  // long as the infection stays in the target's infections list.
+
+  recordSecurityLog(users, target, { by: attacker.username, action: 'deploy:' + malware.id });
+  recordActivity('hack-deploy', attacker.username, malware.name + ' vs ' + target.username);
+  res.json({ ok: true, note: resultNote, balance: attacker.balance });
+});
+
+app.post('/api/hack/avscan', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const user = users.find(candidate => candidate.id === req.user.id);
+  const infections = user.security.infections || [];
+  const removed = [];
+  const remaining = [];
+  for (const inf of infections) {
+    const malware = malwareById(inf.malwareId);
+    const chance = Math.max(5, Math.min(95, 25 + user.security.antivirus * 15 - (malware ? malware.tier * 10 : 0)));
+    if (Math.random() * 100 < chance) {
+      removed.push({ ...inf, malware });
+      if (user.security.ransom && user.security.ransom.infectionId === inf.id) user.security.ransom = null;
+    } else {
+      remaining.push(inf);
+    }
+  }
+  user.security.infections = remaining;
+  saveUsers(users);
+  recordActivity('hack-avscan', user.username, removed.length + ' removed, ' + remaining.length + ' remain');
+  res.json({ removed, remaining: remaining.map(inf => ({ ...inf, malware: malwareById(inf.malwareId) })) });
+});
+
+app.get('/api/hack/dossier/:username', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const viewer = users.find(candidate => candidate.id === req.user.id);
+  const target = users.find(candidate => candidate.username === req.params.username);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  const canMonitor = (target.security.infections || []).some(inf => {
+    const malware = malwareById(inf.malwareId);
+    return malware && malware.mechanic === 'monitor' && inf.by === viewer.username;
+  });
+  if (!canMonitor) return res.status(403).json({ error: 'No monitoring malware installed on this target' });
+  res.json({ username: target.username, balance: target.balance, ...publicSecurity(target) });
 });
 
 /* ---------------- real filesystem API ---------------- */

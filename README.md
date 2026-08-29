@@ -66,6 +66,23 @@ Then open http://localhost:3000
   cookie (set on any successful login or signup) decides which screen shows:
   no cookie routes to Sign Up, an existing one routes to Sign In. Logging out
   doesn't clear it, so a returning device keeps landing on Sign In.
+- **Currency & Bank** — every account starts with $2,500, stored on the user
+  record in `./data/users.json`. The **Bank** app (balance, transfers,
+  transaction history, ransom payoff) is the GUI half; `wallet`,
+  `transfer <user> <amount>`, and `payransom` are the Terminal half.
+  Transactions log to `./data/bank.json`.
+- **Hacking** is entirely Terminal-driven: `scan <user>` recons a target's
+  firewall/antivirus level and open ports, `exploit <user>` attempts a breach
+  (odds driven by both players' firewall levels), and a successful breach
+  opens a 2-minute window to `steal` money or `deploy <malware>` — see
+  `malware` for the full catalog of viruses, trojans, worms, ransomware,
+  spyware, rootkits, adware, and botnet clients, each with a real mechanical
+  effect (balance drain, a persistent backdoor, an account-locking ransom,
+  log-hiding, remote monitoring, or firewall weakening). `avscan` tries to
+  clean your own infections; `firewall upgrade` / `antivirus upgrade` spend
+  balance to raise your defenses; `secstatus` shows your own security
+  profile and intrusion log. Every account's security profile lives
+  alongside its user record.
 - **BIOS setup** is available only by pressing a key during the textual POST
   screen. Recovery also includes non-destructive diagnostics and boot-log
   viewing.

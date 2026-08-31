@@ -20,6 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const USERFILES_DIR = path.join(__dirname, 'userfiles');
+const DEMO_MUSIC_DIR = path.join(__dirname, 'assets', 'demo-music');
 const KV_DIR = path.join(__dirname, 'data', 'kv');
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const ACTIVITY_FILE = path.join(__dirname, 'data', 'activity.json');
@@ -60,7 +61,18 @@ function defaultTree() {
       },
       Downloads: { type: 'folder', children: { 'build.zip': { type: 'file', content: '' } } },
       Pictures: { type: 'folder', children: { 'wallpaper.png': { type: 'file', content: '' } } },
-      Music: { type: 'folder', children: {} },
+      // Real audio, not empty placeholders like the other starter files —
+      // these binary entries only reserve the tree slots (so a wipe/reset
+      // doesn't prune them as "unwanted"); the actual bytes are copied in
+      // by seedDemoMusic() from ./assets/demo-music after the tree is written.
+      Music: {
+        type: 'folder',
+        children: {
+          'Demo 1.mp3': { type: 'file', binary: true, content: '' },
+          'Demo 2.mp3': { type: 'file', binary: true, content: '' },
+          'Demo 3.mp3': { type: 'file', binary: true, content: '' }
+        }
+      },
       Projects: { type: 'folder', children: { 'notes.txt': { type: 'file', content: 'Project notes go here.\n' } } },
       Assets: { type: 'folder', children: {} },
       Backups: { type: 'folder', children: {} },
@@ -68,6 +80,25 @@ function defaultTree() {
       userfiles: { type: 'folder', children: {} }
     }
   };
+}
+
+// Copies the real demo tracks into a user's Music folder. Skips any file
+// that already has real bytes — so it never overwrites something a player
+// uploaded, or re-adds one they deliberately deleted — but does replace a
+// zero-byte placeholder, since that's what writeTreeToDisk() leaves behind
+// for a binary tree entry with no file on disk yet (which is exactly the
+// state right after this runs alongside writeTreeToDisk(defaultTree(), …)
+// for a new signup or a reset). Safe to call repeatedly for any user.
+function seedDemoMusic(user) {
+  const musicDir = path.join(userHome(user), 'Music');
+  fs.mkdirSync(musicDir, { recursive: true });
+  let files = [];
+  try { files = fs.readdirSync(DEMO_MUSIC_DIR); } catch (e) { return; }
+  for (const name of files) {
+    const dest = path.join(musicDir, name);
+    const needsCopy = !fs.existsSync(dest) || fs.statSync(dest).size === 0;
+    if (needsCopy) fs.copyFileSync(path.join(DEMO_MUSIC_DIR, name), dest);
+  }
 }
 
 function ensureDirs() {
@@ -91,10 +122,11 @@ function ensureDirs() {
       if (entry !== 'aledeaux') fs.renameSync(path.join(USERFILES_DIR, entry), path.join(primaryHome, entry));
     }
   }
-  // back-fill folders for any user home that predates them
+  // back-fill folders (and the demo tracks) for any user home that predates them
   for (const user of loadUsers()) {
     fs.mkdirSync(path.join(userHome(user), 'Music'), { recursive: true });
     fs.mkdirSync(path.join(userHome(user), 'Recycle Bin'), { recursive: true });
+    seedDemoMusic(user);
   }
 }
 
@@ -465,6 +497,8 @@ app.post('/api/auth/signup', (req, res) => {
   user.security = defaultSecurity(user);
   users.push(user);
   saveUsers(users);
+  writeTreeToDisk(defaultTree(), userHome(user));
+  seedDemoMusic(user);
   recordActivity('signup', cleanName, role === 'superuser' ? 'first account — superuser' : '');
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, publicUser(user));
@@ -496,6 +530,8 @@ app.post('/api/users', requireAuth, requireSuperuser, (req, res) => {
   const user = { id: crypto.randomUUID(), username: cleanName, passwordHash: hashPassword(password), role, createdAt: new Date().toISOString(), balance: STARTING_BALANCE };
   user.security = defaultSecurity(user);
   users.push(user); saveUsers(users);
+  writeTreeToDisk(defaultTree(), userHome(user));
+  seedDemoMusic(user);
   recordActivity('user-created', req.user.username, cleanName);
   res.status(201).json({ user: publicUser(user) });
 });
@@ -558,7 +594,7 @@ app.post('/api/system/reset', (req, res) => {
   try {
     for (const entry of fs.readdirSync(USERFILES_DIR)) fs.rmSync(path.join(USERFILES_DIR, entry), { recursive: true, force: true });
     for (const file of fs.readdirSync(KV_DIR)) fs.rmSync(path.join(KV_DIR, file), { force: true });
-    for (const user of loadUsers()) writeTreeToDisk(defaultTree(), userHome(user));
+    for (const user of loadUsers()) { writeTreeToDisk(defaultTree(), userHome(user)); seedDemoMusic(user); }
     recordActivity('system-reset', admin.username, 'all user homes and persisted data');
     res.json({ ok: true });
   } catch (e) {
@@ -1264,6 +1300,7 @@ app.put('/api/fs/tree', (req, res) => {
 app.post('/api/fs/reset', (req, res) => {
   try {
     writeTreeToDisk(defaultTree(), userHome(req.user));
+    seedDemoMusic(req.user);
     recordActivity('filesystem-reset', req.user.username);
     res.json({ ok: true });
   } catch (e) {

@@ -37,7 +37,14 @@ Then open http://localhost:3000
 - **Files app / Terminal** read and write actual files under
   `./userfiles/<username>/` on this machine. Each account has its own home;
   delete something in Files, it's gone from disk. Create a file in Terminal,
-  it shows up in Files. Restart the server, it's still there.
+  it shows up in Files. Restart the server, it's still there. Every account
+  — new signups, superuser-created accounts, and any existing account
+  back-filled at boot — gets the same starter tree (`defaultTree()` in
+  `server.js`: a readme, a todo list, empty starter folders) plus three real
+  demo tracks copied into `Music/` from `./assets/demo-music/` by
+  `seedDemoMusic()`; it only ever adds a missing or zero-byte file, so it
+  never overwrites something you've uploaded or re-adds one you deleted on
+  purpose.
 - **System Wipe** requires a superuser credential set, then resets every
   `./userfiles/<username>/` home and regenerates the starter tree. User
   accounts are retained so an administrator can sign back in.

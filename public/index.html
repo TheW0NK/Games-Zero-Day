@@ -221,6 +221,22 @@
   .user-entry.deactivated{ opacity:0.6; }
   .user-entry .user-actions{ display:flex; gap:5px; flex-shrink:0; }
   .user-error{ color:var(--danger); font-size:11px; min-height:16px; margin-bottom:8px; }
+
+  /* generic centered modal — currently just Edit User, written so any
+     future confirm/edit dialog can reuse the same overlay + panel shell */
+  .modal-overlay{ position:absolute; inset:0; z-index:400; display:none; align-items:center; justify-content:center; background:rgba(4,6,12,0.55); backdrop-filter:blur(3px); }
+  .modal-overlay.show{ display:flex; }
+  .modal-panel{ width:320px; max-width:calc(100vw - 40px); background:var(--panel-strong); border:1px solid var(--panel-border); border-radius:14px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); animation:modalIn .16s ease; }
+  @keyframes modalIn{ from{ opacity:0; transform:translateY(6px) scale(.98); } to{ opacity:1; transform:none; } }
+  .modal-title{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px; margin-bottom:14px; }
+  .modal-field{ margin-bottom:12px; }
+  .modal-field label{ display:block; font-size:11px; color:var(--ink-dim); margin-bottom:5px; }
+  .modal-input{ width:100%; background:rgba(255,255,255,0.07); border:1px solid var(--panel-border); color:var(--ink); padding:9px 11px; border-radius:8px; font:12.5px 'Inter',sans-serif; outline:none; }
+  .modal-input:focus{ border-color:var(--accent-soft); box-shadow:0 0 0 3px rgba(125,216,200,0.08); }
+  .modal-error{ color:var(--danger); font-size:11px; min-height:14px; margin:-2px 0 8px; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+  .mini-btn.primary{ background:var(--accent); color:#08110e; border-color:var(--accent); font-weight:600; }
+  .mini-btn.primary:hover{ filter:brightness(1.08); }
   .profile-card{ padding:14px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(255,255,255,0.04); margin-bottom:16px; }
   .profile-name{ font:500 18px 'Space Grotesk',sans-serif; color:var(--accent); }
   .profile-meta{ color:var(--ink-dim); font-size:11px; margin-top:4px; }
@@ -1877,6 +1893,37 @@
       <!-- generic system toast -->
       <div class="os-toast" id="osToast"><div class="dotp"></div><div id="osToastText">Notice</div></div>
 
+      <!-- Edit User modal (Settings > Users and Admin Panel both open this) -->
+      <div class="modal-overlay" id="editUserOverlay" onmousedown="if(event.target===this) closeEditUserModal()">
+        <div class="modal-panel">
+          <div class="modal-title">Edit user</div>
+          <div class="modal-field">
+            <label for="eu-username">Username</label>
+            <input type="text" id="eu-username" class="modal-input" autocomplete="off" maxlength="32">
+          </div>
+          <div class="modal-field">
+            <label for="eu-password">New password</label>
+            <input type="password" id="eu-password" class="modal-input" placeholder="Leave blank to keep current" autocomplete="new-password">
+          </div>
+          <div class="modal-field">
+            <label for="eu-role">Role</label>
+            <select id="eu-role" class="modal-input">
+              <option value="user">User</option>
+              <option value="superuser">Superuser</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label for="eu-balance">Balance</label>
+            <input type="number" id="eu-balance" class="modal-input" min="0" step="1">
+          </div>
+          <div class="modal-error" id="eu-error"></div>
+          <div class="modal-actions">
+            <button class="mini-btn" onclick="closeEditUserModal()">Cancel</button>
+            <button class="mini-btn primary" id="eu-save" onclick="submitEditUser()">Save changes</button>
+          </div>
+        </div>
+      </div>
+
         <!-- sleep + transition overlays (cover full desktop layer) -->
         <div class="sleep-overlay" id="sleepOverlay">
           <div class="sleep-label">Click anywhere to wake</div>
@@ -2266,26 +2313,62 @@
     if(!res.ok){ showUserError(data.error); return; }
     event.target.reset(); refreshUserLists(); showToast('User added');
   }
+  // Edit User modal — replaces the old stack of four sequential prompt()
+  // boxes with one panel that shows the account's current values up front.
+  let editUserTargetId = null;
   async function editUser(id){
-    const username = prompt('New username (leave blank to keep current):');
-    if(username === null) return;
-    const password = prompt('New password (leave blank to keep current):');
-    if(password === null) return;
-    const role = prompt('Role: user or superuser (leave blank to keep current):');
-    if(role === null) return;
-    const balanceInput = prompt('Set balance to (leave blank to keep current):');
-    if(balanceInput === null) return;
-    const body = {}; if(username) body.username = username; if(password) body.password = password; if(role) body.role = role;
-    if(balanceInput.trim() !== ''){
-      const balance = Number(balanceInput);
-      if(!Number.isFinite(balance) || balance < 0){ showUserError('Balance must be a non-negative number'); return; }
-      body.balance = balance;
-    }
-    const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    const data = await res.json();
-    if(!res.ok){ showUserError(data.error); return; }
-    refreshUserLists(); showToast('User updated');
+    showUserError('');
+    try{
+      const res = await fetch('/api/users');
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Could not load user');
+      const user = data.users.find(u => u.id === id);
+      if(!user){ showUserError('User not found'); return; }
+      editUserTargetId = id;
+      document.getElementById('eu-username').value = user.username;
+      document.getElementById('eu-password').value = '';
+      document.getElementById('eu-role').value = user.role;
+      document.getElementById('eu-balance').value = user.balance;
+      document.getElementById('eu-error').textContent = '';
+      document.getElementById('editUserOverlay').classList.add('show');
+      document.getElementById('eu-username').focus();
+    }catch(e){ showUserError(e.message); }
   }
+  function closeEditUserModal(){
+    document.getElementById('editUserOverlay').classList.remove('show');
+    editUserTargetId = null;
+  }
+  async function submitEditUser(){
+    if(!editUserTargetId) return;
+    const errEl = document.getElementById('eu-error');
+    errEl.textContent = '';
+    const username = document.getElementById('eu-username').value.trim();
+    const password = document.getElementById('eu-password').value;
+    const role = document.getElementById('eu-role').value;
+    const balanceInput = document.getElementById('eu-balance').value;
+    if(!username){ errEl.textContent = 'Username is required'; return; }
+    const balance = Number(balanceInput);
+    if(balanceInput === '' || !Number.isFinite(balance) || balance < 0){ errEl.textContent = 'Balance must be a non-negative number'; return; }
+    const body = { username, role, balance };
+    if(password) body.password = password;
+    const saveBtn = document.getElementById('eu-save');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    try{
+      const res = await fetch('/api/users/' + encodeURIComponent(editUserTargetId), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent = data.error || 'Update failed'; return; }
+      closeEditUserModal();
+      refreshUserLists();
+      showToast('User updated');
+    }catch(e){ errEl.textContent = 'Could not reach the server'; }
+    finally{ saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
+  }
+  document.addEventListener('keydown', (e) => {
+    const overlay = document.getElementById('editUserOverlay');
+    if(!overlay || !overlay.classList.contains('show')) return;
+    if(e.key === 'Escape') closeEditUserModal();
+    else if(e.key === 'Enter' && e.target.tagName !== 'SELECT'){ e.preventDefault(); submitEditUser(); }
+  });
   async function deleteUser(id){
     if(!confirm('Remove this user?')) return;
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'DELETE' });

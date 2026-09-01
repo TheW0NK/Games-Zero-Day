@@ -229,6 +229,7 @@
   .modal-panel{ width:320px; max-width:calc(100vw - 40px); background:var(--panel-strong); border:1px solid var(--panel-border); border-radius:14px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,0.5); animation:modalIn .16s ease; }
   @keyframes modalIn{ from{ opacity:0; transform:translateY(6px) scale(.98); } to{ opacity:1; transform:none; } }
   .modal-title{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px; margin-bottom:14px; }
+  .modal-sub{ font-size:11.5px; color:var(--ink-dim); line-height:1.5; margin:-8px 0 14px; }
   .modal-field{ margin-bottom:12px; }
   .modal-field label{ display:block; font-size:11px; color:var(--ink-dim); margin-bottom:5px; }
   .modal-input{ width:100%; background:rgba(255,255,255,0.07); border:1px solid var(--panel-border); color:var(--ink); padding:9px 11px; border-radius:8px; font:12.5px 'Inter',sans-serif; outline:none; }
@@ -765,6 +766,18 @@
   .admin-stat{ flex:1; background:linear-gradient(135deg, rgba(125,216,200,0.14), rgba(125,216,200,0.03)); border:1px solid var(--accent-soft); border-radius:12px; padding:10px 12px; }
   .admin-stat-label{ font-size:10px; color:var(--ink-dim); letter-spacing:0.3px; }
   .admin-stat-value{ font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; color:var(--accent); margin-top:2px; }
+  .admin-pane{ display:none; }
+  .admin-pane.active{ display:block; }
+  .admin-badge{ display:inline-block; margin-left:6px; background:var(--danger); color:#fff; font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:999px; vertical-align:1px; }
+  .report-list{ display:flex; flex-direction:column; gap:8px; }
+  .report-entry{ display:flex; flex-direction:column; gap:6px; padding:11px; border:1px solid rgba(255,107,107,0.3); border-radius:8px; background:rgba(255,107,107,0.06); }
+  .report-entry .report-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .report-entry .report-user{ font-weight:600; }
+  .report-entry .report-reason{ font-size:10px; color:var(--warn); font-weight:600; letter-spacing:0.3px; text-transform:uppercase; }
+  .report-entry .report-detail{ font-size:11.5px; color:var(--ink-dim); }
+  .report-entry .report-evidence{ font-size:10.5px; color:var(--ink-dim); font-family:'JetBrains Mono',monospace; background:rgba(0,0,0,0.28); padding:6px 8px; border-radius:6px; max-height:70px; overflow-y:auto; white-space:pre-wrap; }
+  .report-entry .report-actions{ display:flex; gap:5px; flex-shrink:0; }
+  .report-empty{ color:var(--ink-dim); font-size:12px; padding:24px 8px; text-align:center; }
 
   /* Games (shared) */
   .game-app{ height:100%; display:flex; flex-direction:column; align-items:center; padding:16px; gap:12px; }
@@ -1457,9 +1470,20 @@
             <div class="win-body">
               <div class="admin-app">
                 <div class="admin-stats-row" id="adminStats"></div>
-                <div class="ss-sub" style="margin:10px 0 6px;">Superuser tools — set balances, moderate, or clear an account's malware directly.</div>
-                <div class="user-error" id="adminUserError"></div>
-                <div class="user-list" id="adminUserList"></div>
+                <div class="chat-tabs" style="padding-top:10px;">
+                  <button class="chat-tab active" data-tab="accounts" onclick="adminSwitchTab('accounts')">Accounts</button>
+                  <button class="chat-tab" data-tab="reports" onclick="adminSwitchTab('reports')">Reports<span class="admin-badge" id="adminReportsBadge" hidden></span></button>
+                </div>
+                <div class="admin-pane active" id="admin-pane-accounts">
+                  <div class="ss-sub" style="margin:10px 0 6px;">Superuser tools — set balances, moderate, or clear an account's malware directly.</div>
+                  <div class="user-error" id="adminUserError"></div>
+                  <div class="user-list" id="adminUserList"></div>
+                </div>
+                <div class="admin-pane" id="admin-pane-reports">
+                  <div class="ss-sub" style="margin:10px 0 6px;">Zero Day is meant for players 15+. These accounts have a possible under-15 signal — a self-reported birthday, or an age stated outright in chat. Review each one and check it off.</div>
+                  <div class="user-error" id="adminReportsError"></div>
+                  <div class="report-list" id="adminReportsList"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -1924,6 +1948,25 @@
         </div>
       </div>
 
+      <!-- Birthday check — Zero Day is meant for players 15+. Asked once per
+           account; if skipped, it comes back on a later login (not stored
+           client-side, the server just keeps saying "still needs it"). -->
+      <div class="modal-overlay" id="birthdateOverlay">
+        <div class="modal-panel">
+          <div class="modal-title">Confirm your birthday</div>
+          <div class="modal-sub">Zero Day is meant for players 15 and up. This is asked once per account and is never shown to other players.</div>
+          <div class="modal-field">
+            <label for="bd-input">Date of birth</label>
+            <input type="date" id="bd-input" class="modal-input">
+          </div>
+          <div class="modal-error" id="bd-error"></div>
+          <div class="modal-actions">
+            <button class="mini-btn" onclick="skipBirthdateModal()">Remind me later</button>
+            <button class="mini-btn primary" id="bd-save" onclick="submitBirthdate()">Confirm</button>
+          </div>
+        </div>
+      </div>
+
         <!-- sleep + transition overlays (cover full desktop layer) -->
         <div class="sleep-overlay" id="sleepOverlay">
           <div class="sleep-label">Click anywhere to wake</div>
@@ -2182,6 +2225,7 @@
       deskTopEnteredAt = Date.now();
       resetIdleTimer();
       maybeShowTutorial();
+      checkBirthdateStatus();
     }, 750);
   }
   function lockNow(){ playSfx('lock'); disconnectHackEvents(); setLayer('layer-lock'); }
@@ -2197,6 +2241,41 @@
     }catch(e){ /* not found — first time, fall through and show it */ }
     openApp('tutorial');
     window.storage.set(key, '1', false).catch(() => {});
+  }
+
+  // Age check — Zero Day is meant for players 15+. Asked once per account;
+  // "Remind me later" just closes it for this session, since the server
+  // still reports needsBirthdate:true until it's actually answered, so it
+  // comes back on the next login rather than being gone for good.
+  async function checkBirthdateStatus(){
+    try{
+      const res = await fetch('/api/profile/birthdate-status');
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data.needsBirthdate){
+        document.getElementById('bd-error').textContent = '';
+        document.getElementById('bd-input').value = '';
+        document.getElementById('birthdateOverlay').classList.add('show');
+      }
+    }catch(e){ /* offline — ask again next time */ }
+  }
+  function skipBirthdateModal(){
+    document.getElementById('birthdateOverlay').classList.remove('show');
+  }
+  async function submitBirthdate(){
+    const errEl = document.getElementById('bd-error');
+    const value = document.getElementById('bd-input').value;
+    if(!value){ errEl.textContent = 'Pick a date'; return; }
+    const saveBtn = document.getElementById('bd-save');
+    saveBtn.disabled = true;
+    try{
+      const res = await fetch('/api/profile/birthdate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ birthdate: value }) });
+      const data = await res.json();
+      if(!res.ok){ errEl.textContent = data.error || 'Could not save that'; return; }
+      document.getElementById('birthdateOverlay').classList.remove('show');
+      showToast('Thanks!');
+    }catch(e){ errEl.textContent = 'Could not reach the server'; }
+    finally{ saveBtn.disabled = false; }
   }
 
   // If a superuser deactivates the signed-in account elsewhere, this catches
@@ -2277,6 +2356,61 @@
   // loadUsers()/loadAdminUsers() already no-op if their container isn't in
   // the DOM, so calling both unconditionally is safe).
   function refreshUserLists(){ loadUsers(); loadAdminUsers(); }
+
+  function adminSwitchTab(tab){
+    document.querySelectorAll('#win-adminpanel .chat-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+    document.querySelectorAll('#win-adminpanel .admin-pane').forEach(el => el.classList.toggle('active', el.id === 'admin-pane-' + tab));
+    if(tab === 'reports') loadAgeFlags();
+  }
+
+  const AGE_FLAG_REASON_LABEL = { 'chat-self-disclosure': 'Said their age in chat', 'birthdate': 'Birthdate on file' };
+  async function loadAgeFlags(){
+    const list = document.getElementById('adminReportsList');
+    if(!list || !currentUser || currentUser.role !== 'superuser') return;
+    try{
+      const res = await fetch('/api/age-flags');
+      if(!res.ok) throw new Error('Could not load reports');
+      const data = await res.json();
+      const badge = document.getElementById('adminReportsBadge');
+      badge.hidden = data.flags.length === 0;
+      badge.textContent = data.flags.length;
+      if(!data.flags.length){ list.innerHTML = '<div class="report-empty">No open reports. Nice and quiet.</div>'; return; }
+      list.innerHTML = data.flags.map(flag => {
+        const reasonLabel = AGE_FLAG_REASON_LABEL[flag.reason] || flag.reason;
+        const ageLine = flag.age != null ? ' · says ' + flag.age : '';
+        const countLine = flag.count > 1 ? ' · seen ' + flag.count + '×' : '';
+        const evidence = (flag.evidence || []).slice(-3).map(ev =>
+          '[' + ev.source + '] ' + escapeHtml(ev.snippet)
+        ).join('\n');
+        return '<div class="report-entry">' +
+          '<div class="report-head"><div><div class="report-user">' + escapeHtml(flag.username) + '</div>' +
+          '<div class="report-reason">' + escapeHtml(reasonLabel) + ageLine + countLine + '</div></div></div>' +
+          '<div class="report-detail">' + escapeHtml(flag.detail) + '</div>' +
+          (evidence ? '<div class="report-evidence">' + evidence + '</div>' : '') +
+          '<div class="report-actions">' +
+          '<button class="mini-btn" onclick="resolveAgeFlag(\'' + escapeAttr(flag.id) + '\', \'reviewed\')">Mark reviewed</button>' +
+          '<button class="mini-btn" onclick="resolveAgeFlag(\'' + escapeAttr(flag.id) + '\', \'dismissed\')">Dismiss (false positive)</button>' +
+          '<button class="mini-btn danger" onclick="quickDeactivateFromReport(\'' + escapeAttr(flag.userId) + '\', \'' + escapeAttr(flag.id) + '\')">Deactivate account</button>' +
+          '</div></div>';
+      }).join('');
+    }catch(e){ document.getElementById('adminReportsError').textContent = e.message; }
+  }
+  async function resolveAgeFlag(id, status){
+    const res = await fetch('/api/age-flags/' + encodeURIComponent(id) + '/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status }) });
+    const data = await res.json();
+    if(!res.ok){ document.getElementById('adminReportsError').textContent = data.error; return; }
+    loadAgeFlags();
+    showToast(status === 'reviewed' ? 'Marked reviewed' : 'Dismissed');
+  }
+  async function quickDeactivateFromReport(userId, flagId){
+    if(!confirm('Deactivate this account?')) return;
+    const res = await fetch('/api/users/' + encodeURIComponent(userId), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: false }) });
+    const data = await res.json();
+    if(!res.ok){ document.getElementById('adminReportsError').textContent = data.error; return; }
+    await resolveAgeFlag(flagId, 'reviewed');
+    refreshUserLists();
+    showToast('Account deactivated');
+  }
 
   async function toggleUserActive(id, reactivate){
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: reactivate }) });
@@ -2369,6 +2503,12 @@
     if(e.key === 'Escape') closeEditUserModal();
     else if(e.key === 'Enter' && e.target.tagName !== 'SELECT'){ e.preventDefault(); submitEditUser(); }
   });
+  document.addEventListener('keydown', (e) => {
+    const overlay = document.getElementById('birthdateOverlay');
+    if(!overlay || !overlay.classList.contains('show')) return;
+    if(e.key === 'Escape') skipBirthdateModal();
+    else if(e.key === 'Enter'){ e.preventDefault(); submitBirthdate(); }
+  });
   async function deleteUser(id){
     if(!confirm('Remove this user?')) return;
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'DELETE' });
@@ -2460,7 +2600,7 @@
     if(id === 'bank') bankLoad();
     if(id === 'firewall') fwLoad();
     if(id === 'antivirus') avLoad();
-    if(id === 'adminpanel') loadAdminUsers();
+    if(id === 'adminpanel'){ loadAdminUsers(); loadAgeFlags(); }
     if(id === 'tutorial'){
       const adminSection = document.getElementById('tutAdminSection');
       if(adminSection) adminSection.style.display = currentUser && currentUser.role === 'superuser' ? '' : 'none';
@@ -3077,6 +3217,7 @@
     deskTopEnteredAt = Date.now();
     resetIdleTimer();
     maybeShowTutorial();
+    checkBirthdateStatus();
   }
   document.getElementById('signupGoBtn').addEventListener('click', signUp);
   [signupUsernameInput, signupPasswordInput, signupConfirmInput].forEach(el => el.addEventListener('keydown', e => { if(e.key === 'Enter') signUp(); }));

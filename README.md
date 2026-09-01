@@ -174,6 +174,26 @@ Then open http://localhost:3000
   the pattern list. Superusers can delete any message (regular users can
   delete their own) and mute an account from Settings > Users, which blocks
   that account from posting anywhere until unmuted.
+- **Age safety** — Zero Day is built for players 15 and up, and this is
+  deliberately limited to self-reported signals rather than trying to infer
+  age from writing style (which would just misfire constantly on ordinary
+  adult texting habits). Two sources feed it: a **birthday check** modal
+  (`POST /api/profile/birthdate`) shown once per account on its first
+  desktop entry, and reappearing on later logins only until it's actually
+  answered ("Remind me later" just postpones it); and a **chat scanner**
+  (`extractSelfReportedAges` in `server.js`) that runs on every DM, public,
+  and group message looking for an explicit self-reported age ("I'm 12",
+  "13yo", "14 years old", "turning 11") — plain number-followed-by-duration
+  phrases like "I'm 10 minutes late" are excluded so it doesn't fire on
+  ordinary chat. Neither path blocks or alters the message; a hit just
+  queues a report. Superusers see open reports as a todo-style checklist
+  under the Admin Panel's **Reports** tab (badge shows the open count) with
+  the account, reason, matched age, and a message snippet where relevant —
+  each one can be marked reviewed, dismissed as a false positive, or used
+  to deactivate the account directly. Reports for the same account/reason
+  collapse into one entry with a running count instead of spamming the
+  queue. Nothing here auto-restricts an account; every flag is a prompt for
+  a human to look at it, stored in `./data/age-flags.json`.
 - **Boot** runs the textual POST first (normal firmware-chatter speed),
   then a 3-5s "Prismonian Games Presents" splash, then a 5-7s loading bar
   before landing on Sign Up/Sign In. Pressing any key 5 times during the

@@ -29,6 +29,7 @@ const PUBLIC_CHAT_FILE = path.join(__dirname, 'data', 'public-chat.json');
 const GROUPS_FILE = path.join(__dirname, 'data', 'groups.json');
 const GROUP_MESSAGES_FILE = path.join(__dirname, 'data', 'group-messages.json');
 const BANK_FILE = path.join(__dirname, 'data', 'bank.json');
+const AGE_FLAGS_FILE = path.join(__dirname, 'data', 'age-flags.json');
 const sessions = new Map();
 const startedAt = Date.now();
 const STARTING_BALANCE = 2500;
@@ -548,6 +549,55 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
+// Whether the account still needs the birthday prompt — true until a
+// birthdate has ever been recorded, at which point it's asked exactly once
+// and never again (a "routine" re-ask only applies to accounts that have
+// never actually answered it, not honest ones re-prompted on a timer).
+app.get('/api/profile/birthdate-status', requireAuth, (req, res) => {
+  const user = loadUsers().find(candidate => candidate.id === req.user.id);
+  res.json({ needsBirthdate: !user.birthdate });
+});
+
+app.post('/api/profile/birthdate', requireAuth, (req, res) => {
+  const { birthdate } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthdate || ''))) return res.status(400).json({ error: 'Enter a valid date' });
+  const age = computeAge(birthdate);
+  if (age === null) return res.status(400).json({ error: 'Enter a valid date' });
+  if (new Date(birthdate + 'T00:00:00Z').getTime() > Date.now()) return res.status(400).json({ error: 'That date is in the future' });
+  if (age < 0 || age > 120) return res.status(400).json({ error: 'Enter a real birth date' });
+  const users = loadUsers();
+  const user = users.find(candidate => candidate.id === req.user.id);
+  user.birthdate = birthdate;
+  user.birthdateProvidedAt = new Date().toISOString();
+  saveUsers(users);
+  recordActivity('birthdate-set', user.username);
+  if (age < MINOR_AGE_THRESHOLD) {
+    flagPossibleMinor(user, { reason: 'birthdate', detail: 'Entered a birthdate making them ' + age, age });
+  }
+  res.json({ ok: true });
+});
+
+// Superuser report queue — every open item is a "someone should look at
+// this" todo, not an accusation; resolving one just marks it looked at.
+app.get('/api/age-flags', requireAuth, requireSuperuser, (req, res) => {
+  const flags = readAgeFlags().filter(f => f.status === 'open').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  res.json({ flags });
+});
+
+app.post('/api/age-flags/:id/resolve', requireAuth, requireSuperuser, (req, res) => {
+  const { status } = req.body || {};
+  if (!['reviewed', 'dismissed'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const flags = readAgeFlags();
+  const flag = flags.find(f => f.id === req.params.id);
+  if (!flag) return res.status(404).json({ error: 'Report not found' });
+  flag.status = status;
+  flag.resolvedBy = req.user.username;
+  flag.resolvedAt = new Date().toISOString();
+  saveAgeFlags(flags);
+  recordActivity('age-flag-' + status, req.user.username, flag.username);
+  res.json({ ok: true });
+});
+
 app.get('/api/users', requireAuth, requireSuperuser, (req, res) => res.json({ users: loadUsers().map(publicUser) }));
 
 app.post('/api/users', requireAuth, requireSuperuser, (req, res) => {
@@ -686,8 +736,10 @@ function isBlockedPair(a, b) {
 
 // Shared entry point for every chat surface — validates length, the slur
 // filter, and the poster's mute status in one place so DM/public/group
-// messages can never drift out of sync on moderation rules.
-function moderateOutgoingMessage(res, sender, text) {
+// messages can never drift out of sync on moderation rules. `source` is
+// just a label ('dm'/'public'/'group') passed through to the age-safety
+// scan below so a flagged report can say where a message came from.
+function moderateOutgoingMessage(res, sender, text, source) {
   const cleanText = String(text || '').trim();
   if (!cleanText) { res.status(400).json({ error: 'Message is empty' }); return null; }
   if (cleanText.length > 4000) { res.status(400).json({ error: 'Message is too long' }); return null; }
@@ -697,7 +749,99 @@ function moderateOutgoingMessage(res, sender, text) {
     res.status(400).json({ error: 'That message was blocked by the content filter' });
     return null;
   }
+  scanForMinorSelfDisclosure(sender, cleanText, source);
   return cleanText;
+}
+
+/* ---------------- age safety ---------------- */
+/* This game is intended for players 15 and up. There's no real identity     */
+/* check possible in a project like this, so this is deliberately limited to */
+/* self-reported signals: the birthdate a player enters themselves, and      */
+/* messages where someone states their own age outright ("I'm 12", "13yo").  */
+/* It does NOT try to infer age from writing style/slang/vocabulary — that's */
+/* unreliable pseudo-profiling that would misfire constantly on ordinary     */
+/* adult texting habits, so it's deliberately out of scope here. Anything it */
+/* catches gets queued for a superuser to actually look at and decide on —   */
+/* this never auto-restricts an account by itself.                          */
+
+const MINOR_AGE_THRESHOLD = 15; // flags anyone self-reporting an age below this
+
+function readAgeFlags() {
+  try { return JSON.parse(fs.readFileSync(AGE_FLAGS_FILE, 'utf8')); } catch (e) { return []; }
+}
+function saveAgeFlags(flags) {
+  fs.writeFileSync(AGE_FLAGS_FILE, JSON.stringify(flags, null, 2) + '\n');
+}
+
+function computeAge(birthdateStr) {
+  const dob = new Date(birthdateStr + 'T00:00:00Z');
+  if (Number.isNaN(dob.getTime())) return null;
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+  const hadBirthdayThisYear = (now.getUTCMonth() > dob.getUTCMonth()) ||
+    (now.getUTCMonth() === dob.getUTCMonth() && now.getUTCDate() >= dob.getUTCDate());
+  if (!hadBirthdayThisYear) age -= 1;
+  return age;
+}
+
+// Numbers immediately followed by a duration word don't count — "I'm 10
+// minutes late" isn't an age. Anything else after a self-referential "I'm
+// <number>" is treated as a stated age.
+const AGE_FOLLOWUP_EXCLUDE = /^\s*(?:mins?|minutes?|hours?|hrs?|secs?|seconds?|days?|weeks?|months?)\b/i;
+
+function extractSelfReportedAges(text) {
+  const ages = [];
+  const reIm = /\bi\s*(?:'|’)?m\s+(\d{1,2})\b|\bi\s+am\s+(\d{1,2})\b/gi;
+  let m;
+  while ((m = reIm.exec(text))) {
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 20);
+    if (!AGE_FOLLOWUP_EXCLUDE.test(after)) ages.push(Number(m[1] || m[2]));
+  }
+  const reYo = /\b(\d{1,2})\s*(?:years?\s*old|y\/?\.?\s*o\.?)\b/gi;
+  while ((m = reYo.exec(text))) ages.push(Number(m[1]));
+  const reTurning = /\bturning\s+(\d{1,2})\b/gi;
+  while ((m = reTurning.exec(text))) ages.push(Number(m[1]));
+  // plausible child/teen ages only — filters out "I'm 25", grade numbers
+  // read as ages, typos, etc. landing outside a sane range
+  return ages.filter(n => n >= 5 && n < MINOR_AGE_THRESHOLD);
+}
+
+// Creates (or, if one's already open for this user+reason, tops up) a report
+// for a superuser to review. Never touches the account itself — deactivating
+// or otherwise acting on it is left to a human in the Admin Panel.
+function flagPossibleMinor(user, { reason, detail, age, snippet, source }) {
+  const flags = readAgeFlags();
+  const now = new Date().toISOString();
+  let flag = flags.find(f => f.userId === user.id && f.reason === reason && f.status === 'open');
+  if (flag) {
+    flag.count = (flag.count || 1) + 1;
+    flag.updatedAt = now;
+    if (age != null) flag.age = age;
+    if (snippet) flag.evidence = [...(flag.evidence || []), { at: now, snippet, source }].slice(-8);
+  } else {
+    flag = {
+      id: crypto.randomUUID(), userId: user.id, username: user.username,
+      reason, detail, age: age != null ? age : null, count: 1, status: 'open',
+      createdAt: now, updatedAt: now,
+      evidence: snippet ? [{ at: now, snippet, source }] : []
+    };
+    flags.push(flag);
+  }
+  saveAgeFlags(flags);
+  recordActivity('age-flag', user.username, detail);
+  return flag;
+}
+
+function scanForMinorSelfDisclosure(sender, text, source) {
+  const ages = extractSelfReportedAges(text);
+  if (!ages.length) return;
+  const age = Math.min(...ages);
+  const snippet = text.length > 160 ? text.slice(0, 160) + '…' : text;
+  flagPossibleMinor(sender, {
+    reason: 'chat-self-disclosure',
+    detail: 'Said they\'re ' + age + ' in ' + (source || 'chat'),
+    age, snippet, source
+  });
 }
 
 /* ---------------- chat ---------------- */
@@ -745,7 +889,7 @@ app.post('/api/chat/messages', requireAuth, (req, res) => {
   if (recipient.id === req.user.id) return res.status(400).json({ error: "You can't message yourself" });
   if (recipient.active === false) return res.status(400).json({ error: 'That user is deactivated' });
   if (isBlockedPair(sender, recipient)) return res.status(403).json({ error: 'You can\'t message this user — one of you has blocked the other' });
-  const cleanText = moderateOutgoingMessage(res, sender, text);
+  const cleanText = moderateOutgoingMessage(res, sender, text, 'dm');
   if (cleanText === null) return;
   const message = {
     id: crypto.randomUUID(),
@@ -820,7 +964,7 @@ app.get('/api/chat/public', requireAuth, (req, res) => {
 app.post('/api/chat/public', requireAuth, (req, res) => {
   const users = loadUsers();
   const sender = users.find(user => user.id === req.user.id);
-  const cleanText = moderateOutgoingMessage(res, sender, req.body && req.body.text);
+  const cleanText = moderateOutgoingMessage(res, sender, req.body && req.body.text, 'public');
   if (cleanText === null) return;
   const message = { id: crypto.randomUUID(), from: sender.username, text: cleanText, at: new Date().toISOString() };
   const messages = readPublicChat();
@@ -947,7 +1091,7 @@ app.post('/api/groups/:id/messages', requireAuth, (req, res) => {
   if (!group.members.includes(req.user.username)) return res.status(403).json({ error: 'You are not a member of this group' });
   const users = loadUsers();
   const sender = users.find(user => user.id === req.user.id);
-  const cleanText = moderateOutgoingMessage(res, sender, req.body && req.body.text);
+  const cleanText = moderateOutgoingMessage(res, sender, req.body && req.body.text, 'group');
   if (cleanText === null) return;
   const message = { id: crypto.randomUUID(), groupId: group.id, from: sender.username, text: cleanText, at: new Date().toISOString() };
   const messages = readGroupMessages();

@@ -174,13 +174,13 @@ Then open http://localhost:3000
   the pattern list. Superusers can delete any message (regular users can
   delete their own) and mute an account from Settings > Users, which blocks
   that account from posting anywhere until unmuted.
-- **Boot** opens on a short "Prismonian Games Presents" splash, a brief
-  textual POST, and a fast progress bar before landing on Sign Up/Sign In —
-  the whole sequence takes a couple of seconds. Pressing any key 5 times
-  during the progress bar skips straight to the auth screen. Firmware/BIOS
-  setup has been removed entirely; **Startup Settings** (non-destructive
-  diagnostics and boot-log viewing) is reachable only from inside Recovery
-  Mode now, not from a boot-time keypress.
+- **Boot** runs the textual POST first (normal firmware-chatter speed),
+  then a 3-5s "Prismonian Games Presents" splash, then a 5-7s loading bar
+  before landing on Sign Up/Sign In. Pressing any key 5 times during the
+  loading bar skips straight to the auth screen. Firmware/BIOS setup has
+  been removed entirely; **Startup Settings** (non-destructive diagnostics
+  and boot-log viewing) is reachable only from inside Recovery Mode now,
+  not from a boot-time keypress.
 - **Snake** and **2048** both track a persisted personal best score and pay
   out a small currency bonus on game over (capped, on a few-minutes
   cooldown so it's not farmable) — Snake also has pause (P/Escape), and

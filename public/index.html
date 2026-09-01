@@ -1967,6 +1967,11 @@
     'CPU: ZeroDay-Compatible x86_64 @ 3.20GHz — 8 cores',
     'Memory Test: 16384MB ......... OK',
     'Detecting Primary Master  ... ZERODAY-SSD-512  OK',
+    'Detecting Primary Slave   ... None',
+    'Detecting Secondary Master... None',
+    'Initializing USB Controllers ... Done',
+    'Initializing Network Adapter ... Done',
+    ' ',
     'Booting from Primary Master...'
   ];
   function runPostSequence(callback){
@@ -1985,7 +1990,7 @@
           main.style.display = 'flex';
           playSfx('bootChime');
           callback();
-        }, 120);
+        }, 300);
         return;
       }
       const d = document.createElement('div');
@@ -1995,23 +2000,30 @@
       if(isOk) playSfx('postBeep');
       i++;
       postStep = next;
-      postTimer = setTimeout(next, 25 + Math.random() * 35);
+      postTimer = setTimeout(next, 90 + Math.random() * 110);
     }
     postStep = next;
     next();
   }
 
+  // Order is: POST text first (real boot firmware feel, normal speed), then
+  // the Prismonian Games splash once POST is done, then the loading bar —
+  // not splash-first, so the "hardware" chatter actually reads like it's
+  // happening before the publisher card, the way a real console boot does.
   function runBoot(){
     setLayer('layer-boot');
     bootPaused = false;
     postPaused = false;
     resetBootKeyDots();
     const splash = document.getElementById('brandSplash');
-    splash.classList.remove('hide');
-    setTimeout(() => {
-      splash.classList.add('hide');
-      runPostSequence(runBootProgress);
-    }, 550);
+    splash.classList.add('hide');
+    runPostSequence(() => {
+      splash.classList.remove('hide');
+      setTimeout(() => {
+        splash.classList.add('hide');
+        runBootProgress();
+      }, 3000 + Math.random() * 2000); // 3-5s
+    });
   }
 
   function runBootProgress(){
@@ -2026,35 +2038,41 @@
       [55, 'Preparing your desktop…'],
       [85, 'Almost there…']
     ];
-    let pct = 0, stageIdx = 0;
+    // Time-based rather than random-increment: guarantees the bar actually
+    // takes 5-7s end to end (a fixed target picked once per boot) instead of
+    // just averaging out to roughly that over enough random ticks.
+    const duration = 5000 + Math.random() * 2000;
+    const bootStart = Date.now();
+    bootPauseAccum = 0;
+    let stageIdx = 0;
     status.textContent = stages[0][1];
 
     function step(){
       if(bootPaused) return; // resumeBoot() will call bootStep() again when settings close
-      if(pct >= 100){
-        setTimeout(showAuthScreen, 150);
-        return;
-      }
-      const inc = Math.random() * 9 + 5;
-      const delay = Math.random() * 50 + 25;
-
-      pct = Math.min(100, pct + inc);
+      const elapsed = Date.now() - bootStart - bootPauseAccum;
+      const pct = Math.min(100, elapsed / duration * 100);
       fill.style.width = pct + '%';
 
       while(stageIdx < stages.length - 1 && pct >= stages[stageIdx + 1][0]){
         stageIdx++;
         status.textContent = stages[stageIdx][1];
       }
-      setTimeout(step, delay);
+      if(pct >= 100){
+        setTimeout(showAuthScreen, 150);
+        return;
+      }
+      setTimeout(step, 60);
     }
     bootStep = step;
     step();
   }
 
+  let bootPauseAccum = 0, bootPauseStart = 0;
   function pauseBootForSettings(){
     if(!document.getElementById('layer-boot').classList.contains('active')) return; // opened from Recovery, not an active boot — nothing to pause
     if(document.getElementById('bootMainContent').style.display === 'none') return; // still in POST — no boot progress running yet
     bootPaused = true;
+    bootPauseStart = Date.now();
     const status = document.getElementById('bootStatus');
     status.dataset.prev = status.textContent;
     status.textContent = 'Startup paused — Startup Settings open';
@@ -2062,6 +2080,7 @@
   function resumeBootFromSettings(){
     if(!bootPaused) return; // no real boot was paused (e.g. opened from Recovery) — nothing to resume
     bootPaused = false;
+    if(bootPauseStart){ bootPauseAccum += Date.now() - bootPauseStart; bootPauseStart = 0; }
     const status = document.getElementById('bootStatus');
     if(status.dataset.prev) status.textContent = status.dataset.prev;
     if(bootStep) bootStep();

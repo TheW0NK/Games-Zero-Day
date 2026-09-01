@@ -1,5 +1,5 @@
 /**
- * Aegis OS — hosted server
+ * Zero Day — hosted server
  *
  * Serves the OS frontend and backs it with real infrastructure:
  *   - /api/fs/*   real files on disk under ./userfiles
@@ -74,7 +74,7 @@ function defaultTree() {
           'readme.md': {
             type: 'file',
             content:
-              '# Aegis OS\n\nThis is the hosted build. Everything in here is a real file on disk under ' +
+              '# Zero Day\n\nThis is the hosted build. Everything in here is a real file on disk under ' +
               '`./userfiles` on the server — edit it in Files, in the Terminal, or directly in your editor, ' +
               'and it shows up in both places.\n'
           }
@@ -617,15 +617,45 @@ app.delete('/api/users/:id', requireAuth, requireSuperuser, (req, res) => {
   res.json({ deleted: true });
 });
 
-app.post('/api/system/reset', (req, res) => {
-  const { username, password } = req.body || {};
-  const admin = loadUsers().find(user => user.username === String(username || '') && user.role === 'superuser');
-  if (!admin || !passwordMatches(password, admin.passwordHash)) return res.status(403).json({ error: 'Valid superuser credentials are required' });
+// Admin remediation tool — clears every infection and any active ransom on
+// an account without requiring them to grind avscan themselves.
+app.post('/api/users/:id/clear-malware', requireAuth, requireSuperuser, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const user = users.find(candidate => candidate.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const cleared = (user.security.infections || []).length;
+  user.security.infections = [];
+  user.security.ransom = null;
+  saveUsers(users);
+  recordActivity('admin-clear-malware', req.user.username, user.username + ' — ' + cleared + ' infection(s)');
+  res.json({ cleared });
+});
+
+// Scoped to the account that runs it — wipes that account's own files, own
+// KV entries, and own malware, and never touches anyone else's. Any
+// authenticated user can wipe their own account (re-confirming their own
+// password first); this used to be a superuser-only action that wiped
+// every account on the server, which is a much bigger blast radius than
+// "reset my own stuff" actually calls for.
+app.post('/api/system/reset', requireAuth, (req, res) => {
+  const { password } = req.body || {};
+  const users = loadUsers();
+  const user = users.find(candidate => candidate.id === req.user.id);
+  if (!passwordMatches(password, user.passwordHash)) return res.status(403).json({ error: 'Incorrect password' });
   try {
-    for (const entry of fs.readdirSync(USERFILES_DIR)) fs.rmSync(path.join(USERFILES_DIR, entry), { recursive: true, force: true });
-    for (const file of fs.readdirSync(KV_DIR)) fs.rmSync(path.join(KV_DIR, file), { force: true });
-    for (const user of loadUsers()) { writeTreeToDisk(defaultTree(), userHome(user)); seedDemoMusic(user); }
-    recordActivity('system-reset', admin.username, 'all user homes and persisted data');
+    fs.rmSync(userHome(user), { recursive: true, force: true });
+    for (const file of fs.readdirSync(KV_DIR)) {
+      let key = '';
+      try { key = Buffer.from(file.replace(/\.json$/, ''), 'base64url').toString('utf8'); } catch (e) { continue; }
+      if (key.includes(user.username)) fs.rmSync(path.join(KV_DIR, file), { force: true });
+    }
+    writeTreeToDisk(defaultTree(), userHome(user));
+    seedDemoMusic(user);
+    user.security = user.security || defaultSecurity(user);
+    user.security.infections = [];
+    user.security.ransom = null;
+    saveUsers(users);
+    recordActivity('system-reset', user.username, 'own account wiped, all malware cleared');
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: 'System reset failed: ' + e.message });
@@ -943,6 +973,34 @@ app.get('/api/bank/account', requireAuth, (req, res) => {
   const user = loadUsers().find(candidate => candidate.id === req.user.id);
   const transactions = readBank().filter(t => t.from === user.username || t.to === user.username).slice(-50).reverse();
   res.json({ balance: user.balance, ransom: (user.security && user.security.ransom) || null, transactions });
+});
+
+/* ---------------- minigame rewards ---------------- */
+/* A small, capped, cooldown-gated currency top-up for playing Snake/2048 — */
+/* not verified against a real game replay (the client just reports a      */
+/* score), so it's deliberately kept minor relative to the hacking economy */
+/* rather than something worth actually cheating for.                     */
+
+const GAME_REWARD_COOLDOWN_MS = 3 * 60 * 1000;
+const gameRewardCooldowns = new Map();
+
+app.post('/api/games/reward', requireAuth, (req, res) => {
+  const { game, score } = req.body || {};
+  if (!['snake', 'g2048'].includes(game)) return res.status(400).json({ error: 'Unknown game' });
+  const cleanScore = Math.max(0, Math.floor(Number(score) || 0));
+  const last = gameRewardCooldowns.get(req.user.id) || 0;
+  if (Date.now() - last < GAME_REWARD_COOLDOWN_MS) {
+    return res.status(429).json({ error: 'Already claimed a reward recently', retryInMs: GAME_REWARD_COOLDOWN_MS - (Date.now() - last) });
+  }
+  const reward = game === 'snake' ? Math.min(Math.floor(cleanScore / 5), 40) : Math.min(Math.floor(cleanScore / 40), 60);
+  if (reward <= 0) return res.json({ reward: 0 });
+  gameRewardCooldowns.set(req.user.id, Date.now());
+  const users = loadUsers();
+  const user = users.find(candidate => candidate.id === req.user.id);
+  user.balance = (typeof user.balance === 'number' ? user.balance : STARTING_BALANCE) + reward;
+  saveUsers(users);
+  recordActivity('game-reward', user.username, game + ' score ' + cleanScore + ' — $' + reward);
+  res.json({ reward, balance: user.balance });
 });
 
 app.get('/api/bank/leaderboard', requireAuth, (req, res) => {
@@ -1597,7 +1655,7 @@ app.all('/proxy', requireAuth, express.raw({ type: () => true, limit: '20mb' }),
     const upstream = await fetch(target, {
       method,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; AegisOSProxy/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; ZeroDayProxy/1.0)',
         ...(req.headers['content-type'] ? { 'Content-Type': req.headers['content-type'] } : {})
       },
       body: hasBody ? req.body : undefined,
@@ -1646,5 +1704,5 @@ app.get('*', (req, res) => {
 // process shows as running and the port shows as forwarded while requests
 // still 404 at the proxy.
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('Aegis OS running at http://localhost:' + PORT);
+  console.log('Zero Day running at http://localhost:' + PORT);
 });

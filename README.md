@@ -1,4 +1,4 @@
-# Aegis OS — hosted build
+# Zero Day — hosted build
 
 The same OS demo, now running with a real backend instead of browser-storage
 workarounds.
@@ -28,6 +28,11 @@ Then open http://localhost:3000
   can add, modify, deactivate, remove, mute, or set the currency balance of
   other accounts from Settings > Users (or `setbalance <user> <amount>` in
   the Terminal) — handy for correcting an exploited bug or just moderating.
+  Superusers also get an **Admin Panel** app (hidden from everyone else's
+  Start Menu) with the same account-management tools plus at-a-glance
+  stats — total accounts, total currency in circulation, and superuser
+  count — and a one-click **Clear Malware** action per user for wiping out
+  someone's infections without touching anything else on their account.
   Passwords are never stored or logged in plain text: each one is hashed
   with `scrypt` and a random per-account salt (`hashPassword`/
   `passwordMatches` in `server.js`), compared with a timing-safe check, and
@@ -45,9 +50,12 @@ Then open http://localhost:3000
   `seedDemoMusic()`; it only ever adds a missing or zero-byte file, so it
   never overwrites something you've uploaded or re-adds one you deleted on
   purpose.
-- **System Wipe** requires a superuser credential set, then resets every
-  `./userfiles/<username>/` home and regenerates the starter tree. User
-  accounts are retained so an administrator can sign back in.
+- **System Wipe** is self-service and localized: any signed-in user can
+  confirm their own password from Settings to erase only their own
+  `./userfiles/<username>/` home, clear every one of their own malware
+  infections, and regenerate the starter tree — it never touches other
+  accounts. Both the frontend confirmation flow and `POST
+  /api/system/reset` scope entirely to the calling session's own user.
 - **Browser app**'s "Full Page" mode routes through `/proxy`, a plain Express
   route on this same server — it fetches the target page itself, strips the
   headers that block iframe embedding, and serves the result back
@@ -72,15 +80,22 @@ Then open http://localhost:3000
   dragging, removed, and restored per user.
 - **Uploads** accept arbitrary file types except ZIP files and save binary
   data in the current user directory.
-- **Writer**, **Sheets**, and the VS Code-inspired **Aegis IDE** provide basic
-  document, spreadsheet, and HTML app authoring workflows.
+- **Writer**, **Sheets**, and the VS Code-inspired **Zero Day IDE** provide
+  basic document, spreadsheet, and HTML app authoring workflows.
 - **Music Player** plays only the real `.mp3` files in each user's `Music`
   folder — add songs there from the Files app, the player's own upload
   button, or the Terminal, and they show up in the playlist.
 - **Sign Up / Sign In** — after boot, a non-`HttpOnly` `aegis_known_device`
   cookie (set on any successful login or signup) decides which screen shows:
   no cookie routes to Sign Up, an existing one routes to Sign In. Logging out
-  doesn't clear it, so a returning device keeps landing on Sign In.
+  doesn't clear it, so a returning device keeps landing on Sign In. (The
+  cookie name and other internal KV-key prefixes were kept as-is during the
+  Zero Day rebrand — no player-visible benefit to renaming them, and it
+  would've added migration risk for existing sessions/data.) The first
+  account signed in on any desktop gets a one-time **Tutorial** window
+  covering the desktop, money, hacking, defense, and chat basics — it won't
+  auto-show again after that, but it's always reachable from the Start
+  Menu. Superusers get an extra section in it introducing the Admin Panel.
 - **Currency & Bank** — every account starts with $2,500, stored on the user
   record in `./data/users.json`. The **Bank** app (balance, transfers,
   transaction history, ransom payoff) is the GUI half; `wallet`,
@@ -134,6 +149,14 @@ Then open http://localhost:3000
   (Nullroot/Hollowman) suppresses this alert entirely for that attacker —
   full stealth, not just a hidden log entry. `leaderboard` (or `top`) shows
   the ten richest active accounts.
+  A serious infection has one more consequence: any **tier 2** malware
+  sitting on your account visibly glitches Recovery Mode once you're in it,
+  and any **tier 3** malware gives Recovery Mode a real (~45%) chance of
+  failing to boot into at all on a given attempt, kicking you back out with
+  an error toast — thematically, the moment you most need Recovery Mode
+  (to clean up an infection) is the moment it's hardest to reach. Running
+  `avscan` (or having a superuser clear your malware from the Admin Panel)
+  immediately restores normal, reliable access.
   The **Firewall** and **Antivirus** App Store
   apps are GUI front-ends for the same `/api/hack/*` endpoints (level
   upgrades, per-port modules, scanning) if you'd rather not use the
@@ -151,9 +174,17 @@ Then open http://localhost:3000
   the pattern list. Superusers can delete any message (regular users can
   delete their own) and mute an account from Settings > Users, which blocks
   that account from posting anywhere until unmuted.
-- **BIOS setup** is available only by pressing a key during the textual POST
-  screen. Recovery also includes non-destructive diagnostics and boot-log
-  viewing.
+- **Boot** opens on a short "Prismonian Games Presents" splash, a brief
+  textual POST, and a fast progress bar before landing on Sign Up/Sign In —
+  the whole sequence takes a couple of seconds. Pressing any key 5 times
+  during the progress bar skips straight to the auth screen. Firmware/BIOS
+  setup has been removed entirely; **Startup Settings** (non-destructive
+  diagnostics and boot-log viewing) is reachable only from inside Recovery
+  Mode now, not from a boot-time keypress.
+- **Snake** and **2048** both track a persisted personal best score and pay
+  out a small currency bonus on game over (capped, on a few-minutes
+  cooldown so it's not farmable) — Snake also has pause (P/Escape), and
+  2048 has a single-level undo.
 - `userfiles/` and `data/` are gitignored on purpose, so a fresh clone/rebuild
   always starts from the clean default tree rather than committing your demo
   files to source control.

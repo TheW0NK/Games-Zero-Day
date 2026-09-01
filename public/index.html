@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Aegis OS</title>
+<title>Zero Day</title>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"></noscript>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-
   :root{
     --void:#070910;
     --deep:#0c1120;
@@ -94,15 +94,18 @@
   .boot-mark{
     display:flex; align-items:center; gap:16px;
   }
-  .boot-glyph{
-    width:46px; height:46px; border-radius:50%;
-    background: conic-gradient(from 0deg, var(--accent), #5a7fe0, #b98cf0, var(--accent));
-    animation: spin 2.4s linear infinite;
-  }
+  .boot-glyph{ width:46px; height:46px; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
   .boot-word{
-    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:34px; letter-spacing:6px;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:30px; letter-spacing:5px;
   }
+  .brand-splash{
+    position:absolute; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    background:var(--void); opacity:1; transition:opacity .35s ease; pointer-events:none;
+  }
+  .brand-splash.hide{ opacity:0; }
+  .brand-splash-name{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:22px; letter-spacing:4px; color:var(--ink); }
+  .brand-splash-sub{ font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:5px; color:var(--ink-dim); }
   .boot-bar-track{ width:360px; height:3px; border-radius:2px; background:rgba(255,255,255,0.08); overflow:hidden; }
   .boot-bar-fill{ height:100%; width:0%; background:linear-gradient(90deg, var(--accent), #5a7fe0); border-radius:2px; }
   .boot-status{ font-size:12px; letter-spacing:1px; color:var(--ink-dim); font-family:'JetBrains Mono',monospace; }
@@ -401,7 +404,7 @@
   .taskbar{ height:56px; flex-shrink:0; background:rgba(10,13,22,0.75); backdrop-filter:blur(20px); border-top:1px solid var(--panel-border); display:flex; align-items:center; padding:0 14px; gap:8px; position:relative; z-index:50; user-select:none; }
   .tb-start{ display:flex; align-items:center; gap:9px; padding:8px 14px; border-radius:9px; cursor:pointer; }
   .tb-start:hover{ background:rgba(255,255,255,0.07); }
-  .tb-start .mark{ width:18px; height:18px; border-radius:5px; background:conic-gradient(from 0deg, var(--accent), #5a7fe0, #b98cf0, var(--accent)); }
+  .tb-start .mark{ width:18px; height:18px; }
   .tb-start span{ font-family:'Space Grotesk',sans-serif; font-size:12.5px; font-weight:500; }
   .tb-sep{ width:1px; height:26px; background:var(--panel-border); margin:0 4px; }
   .tb-apps{ display:flex; align-items:center; gap:4px; }
@@ -545,6 +548,23 @@
     background: repeating-linear-gradient(135deg, #12100a 0 26px, #100e09 26px 52px);
     flex-direction:column;
   }
+  /* A tier-2+ malware infection makes Recovery Mode visibly unstable to get
+     into — a brief entry flicker plus a faint, persistent scanline while
+     you're in it, readable throughout, not a real usability blocker. */
+  #layer-recovery.glitched{ animation: glitchFlicker .22s steps(2) 4; }
+  #layer-recovery.glitched::after{
+    content:''; position:absolute; inset:0; pointer-events:none; z-index:5;
+    background: repeating-linear-gradient(0deg, rgba(255,90,90,0.05) 0px, transparent 2px, transparent 5px);
+    animation: glitchScan 5s linear infinite;
+  }
+  @keyframes glitchFlicker{
+    0%{ filter:none; transform:translateX(0); }
+    25%{ filter:hue-rotate(18deg) saturate(1.5); transform:translateX(-3px); }
+    50%{ filter:hue-rotate(-14deg); transform:translateX(3px); }
+    75%{ filter:none; transform:translateX(-1px); }
+    100%{ filter:none; transform:translateX(0); }
+  }
+  @keyframes glitchScan{ 0%{ background-position-y:0; } 100%{ background-position-y:240px; } }
   .rv-banner{
     flex-shrink:0; height:44px; display:flex; align-items:center; justify-content:space-between;
     padding:0 20px; background:rgba(242,197,116,0.1); border-bottom:1px solid rgba(242,197,116,0.28);
@@ -715,6 +735,21 @@
   .sec-infection-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border-radius:9px; background:rgba(255,107,107,0.08); font-size:12px; }
   .sec-infection-row small{ color:var(--ink-dim); display:block; font-size:10px; margin-top:1px; }
 
+  /* Getting Started tutorial */
+  .tutorial-app{ height:100%; overflow-y:auto; padding:18px 20px; }
+  .tut-section{ margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--panel-border); }
+  .tut-section:last-of-type{ border-bottom:none; }
+  .tut-section h3{ font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px; }
+  .tut-section p{ font-size:12px; line-height:1.6; color:var(--ink); margin:0 0 6px; }
+  .tut-section p:last-child{ margin-bottom:0; }
+
+  /* Admin Panel */
+  .admin-app{ height:100%; display:flex; flex-direction:column; padding:16px; overflow-y:auto; }
+  .admin-stats-row{ display:flex; gap:10px; }
+  .admin-stat{ flex:1; background:linear-gradient(135deg, rgba(125,216,200,0.14), rgba(125,216,200,0.03)); border:1px solid var(--accent-soft); border-radius:12px; padding:10px 12px; }
+  .admin-stat-label{ font-size:10px; color:var(--ink-dim); letter-spacing:0.3px; }
+  .admin-stat-value{ font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; color:var(--accent); margin-top:2px; }
+
   /* Games (shared) */
   .game-app{ height:100%; display:flex; flex-direction:column; align-items:center; padding:16px; gap:12px; }
   .game-hud{ width:100%; display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--ink-dim); }
@@ -781,28 +816,40 @@
     <g id="i-bank"><path d="M12 3 3 8h18Z"/><path d="M5 10v9M9 10v9M15 10v9M19 10v9M3 21h18"/></g>
     <g id="i-shield-check"><path d="M12 2 3 6v6c0 5 4 9 9 10 5-1 9-5 9-10V6l-9-4Z"/><path d="M8.5 12.5l2.2 2.2L15.5 10"/></g>
     <g id="i-bug"><path d="M8 6l1.5 1.5M16 6l-1.5 1.5"/><rect x="8" y="9" width="8" height="9" rx="4"/><path d="M12 9V6M3 13h5M16 13h5M4 18l4-2M20 18l-4-2M4 9l4 2M20 9l-4 2"/></g>
+    <linearGradient id="logoGrad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7dd8c8"/><stop offset="55%" stop-color="#5a7fe0"/><stop offset="100%" stop-color="#b98cf0"/>
+    </linearGradient>
+    <g id="i-logo" stroke="none">
+      <path d="M24 3 43 12v14c0 12-8 21-19 22C13 47 5 38 5 26V12L24 3Z" fill="url(#logoGrad)"/>
+      <path d="M24 13c-6.5 0-10 6-10 13s3.5 13 10 13 10-6 10-13-3.5-13-10-13Zm0 6c2.6 0 4 3 4 7s-1.4 7-4 7-4-3-4-7 1.4-7 4-7Z" fill="#0a0e18"/>
+      <path d="M27.5 16 19 27.5h5.5l-2.3 8 10.3-13h-5.6l1.1-6.5Z" fill="url(#logoGrad)"/>
+    </g>
   </defs>
 </svg>
 
 <div class="viewport-wrap" id="viewportWrap">
 <div class="screen" id="screen">
-    <div class="res-tag" id="resTag">Aegis OS</div>
+    <div class="res-tag" id="resTag">Zero Day</div>
 
       <!-- ============ BOOT ============ -->
       <div class="layer active" id="layer-boot">
         <div class="bg-stars"></div>
+        <div class="brand-splash" id="brandSplash">
+          <div class="brand-splash-name">PRISMONIAN GAMES</div>
+          <div class="brand-splash-sub">PRESENTS</div>
+        </div>
         <div class="post-screen" id="postScreen">
           <div class="post-lines" id="postLines"></div>
         </div>
         <div class="boot-main-content" id="bootMainContent" style="display:none;">
           <div class="boot-mark">
-            <div class="boot-glyph"></div>
-            <div class="boot-word">AEGIS</div>
+            <svg class="boot-glyph" viewBox="0 0 48 48"><use href="#i-logo"/></svg>
+            <div class="boot-word">ZERO DAY</div>
           </div>
           <div class="boot-bar-track"><div class="boot-bar-fill" id="bootFill"></div></div>
           <div class="boot-status" id="bootStatus">Initializing system…</div>
           <div class="boot-keyhint">
-            <span>Press any key 5 times for Startup Settings</span>
+            <span>Press any key 5 times to skip</span>
             <div class="boot-keydots" id="bootKeyDots"><span></span><span></span><span></span><span></span><span></span></div>
           </div>
         </div>
@@ -978,7 +1025,7 @@
 
                   <div class="settings-pane" id="pane-about">
                     <h2>About this device</h2>
-                    <div class="setting-row"><div class="lab">OS</div><div class="sub">Aegis OS · Build 1.0.0-demo</div></div>
+                    <div class="setting-row"><div class="lab">OS</div><div class="sub">Zero Day · Build 1.0.0-demo</div></div>
                     <div class="setting-row"><div class="lab">Screen</div><div class="sub" id="aboutRes">—</div></div>
                     <div class="setting-row"><div class="lab">Uptime</div><div class="sub" id="aboutUptime">00:00:00</div></div>
                     <div class="setting-row"><div class="lab">Windows open</div><div class="sub" id="aboutWindows">0</div></div>
@@ -1006,7 +1053,7 @@
                   <div class="navbtn" id="btnBack" onclick="browserBack()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></div>
                   <div class="navbtn" id="btnFwd" onclick="browserForward()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></div>
                   <div class="navbtn" onclick="browserReload()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v6h6M20 20v-6h-6M20 4l-7 7M4 20l7-7"/></svg></div>
-                  <input class="browser-address" id="browserAddress" value="aegis://home" onkeydown="if(event.key==='Enter') browserGo(this.value)" />
+                  <input class="browser-address" id="browserAddress" value="zeroday://home" onkeydown="if(event.key==='Enter') browserGo(this.value)" />
                 </div>
                 <div class="browser-page" id="browserPage"></div>
               </div>
@@ -1145,9 +1192,9 @@
           <!-- IDE WINDOW -->
           <div class="window" id="win-ide" style="left:180px; top:45px; width:760px; height:600px;">
             <div class="win-titlebar" onmousedown="startDrag(event,'win-ide')" ondblclick="maximizeApp('ide')">
-              <div class="win-title">&lt;/&gt; Aegis IDE</div><div class="win-controls"><button class="win-btn min" onclick="minimizeApp('ide')"></button><button class="win-btn max" onclick="maximizeApp('ide')"></button><button class="win-btn close" onclick="closeApp('ide')"></button></div>
+              <div class="win-title">&lt;/&gt; Zero Day IDE</div><div class="win-controls"><button class="win-btn min" onclick="minimizeApp('ide')"></button><button class="win-btn max" onclick="maximizeApp('ide')"></button><button class="win-btn close" onclick="closeApp('ide')"></button></div>
             </div><div class="win-body"><div class="ide-app"><div class="ide-toolbar"><input class="ide-input" id="ideAppName" value="My App" placeholder="App name"><button class="files-tbtn" onclick="ideSave()">Save</button><button class="files-tbtn" onclick="ideRun()">Run</button></div><div class="ide-shell"><aside class="ide-sidebar"><strong>EXPLORER</strong><div class="ide-file active">index.html</div><div class="ide-file">assets</div><div class="ide-file">README.md</div></aside><div class="ide-editor"><div class="ide-tabs">index.html</div><textarea class="ide-code" id="ideCode" spellcheck="false"><!doctype html>
-<html><body style="font-family:sans-serif;padding:24px"><h1>Hello, Aegis</h1><p>Build something useful.</p></body></html></textarea></div></div><div class="ss-sub">Preview</div><iframe class="ide-preview" id="idePreview" sandbox="allow-scripts"></iframe></div></div>
+<html><body style="font-family:sans-serif;padding:24px"><h1>Hello, Zero Day</h1><p>Build something useful.</p></body></html></textarea></div></div><div class="ss-sub">Preview</div><iframe class="ide-preview" id="idePreview" sandbox="allow-scripts"></iframe></div></div>
           </div>
 
           <!-- OFFICE WINDOWS -->
@@ -1326,6 +1373,81 @@
             </div>
           </div>
 
+          <!-- GETTING STARTED (tutorial) WINDOW -->
+          <div class="window" id="win-tutorial" style="left:420px; top:50px; width:560px; height:540px;">
+            <div class="win-titlebar" onmousedown="startDrag(event,'win-tutorial')" ondblclick="maximizeApp('tutorial')">
+              <div class="win-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-flask"/></svg> Getting Started</div>
+              <div class="win-controls">
+                <button class="win-btn min" onclick="minimizeApp('tutorial')"></button>
+                <button class="win-btn max" onclick="maximizeApp('tutorial')"></button>
+                <button class="win-btn close" onclick="closeApp('tutorial')"></button>
+              </div>
+            </div>
+            <div class="win-body">
+              <div class="tutorial-app">
+                <h2>Welcome to Zero Day</h2>
+                <div class="ss-sub" style="margin-bottom:14px;">A quick reference — reopen this anytime from the Start Menu.</div>
+
+                <div class="tut-section">
+                  <h3>Desktop basics</h3>
+                  <p>Click any icon on the desktop or in the taskbar to open it. Click a window to bring it to front. Right-click almost anything — desktop, files, windows, the taskbar — for more options.</p>
+                </div>
+
+                <div class="tut-section">
+                  <h3>Money</h3>
+                  <p>Everyone starts with $2,500. Open <b>Bank</b> to see your balance, send money, or check the transaction history. In the <b>Terminal</b>: <span class="prompt">wallet</span> shows your balance, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span> sends money, <span class="prompt">leaderboard</span> shows the richest accounts. Playing Snake or 2048 also pays out a small bonus based on your score.</p>
+                </div>
+
+                <div class="tut-section">
+                  <h3>Hacking another player</h3>
+                  <p>Everything below happens in the <b>Terminal</b>:</p>
+                  <p>1. <span class="prompt">scan &lt;user&gt;</span> — free recon, shows their open ports.</p>
+                  <p>2. <span class="prompt">exploit &lt;user&gt; &lt;port&gt; &lt;bruteforce|stealth|injection&gt;</span> ($20) — starts a code-breaking puzzle instead of an instant win. <span class="prompt">guess n n n n</span> (four numbers, 1-6 each) to crack it — you'll get exact/partial feedback like Mastermind. <span class="prompt">puzzle</span> shows where you left off.</p>
+                  <p>3. Crack it and you're in for 2 minutes — <span class="prompt">steal</span> takes a cut of their balance, or <span class="prompt">deploy &lt;malware&gt;</span> installs something nastier (see <span class="prompt">malware</span> for the full list).</p>
+                  <p>Payouts scale with how much security a target has invested — a completely undefended account (0% security) has nothing worth stealing, so there's no money in picking on brand-new players.</p>
+                </div>
+
+                <div class="tut-section">
+                  <h3>Defending yourself</h3>
+                  <p><span class="prompt">secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;</span> ($150) installs a defense module — each one beats one attack approach and loses to another, so mixing them up makes you harder to read. <span class="prompt">firewall upgrade</span> / <span class="prompt">antivirus upgrade</span> give a smaller general edge. <span class="prompt">avscan</span> cleans off infections. The <b>Firewall</b> and <b>Antivirus</b> apps do the same thing with buttons instead of commands.</p>
+                  <p>If someone breaches you, you'll get a real-time alert with a short window to type <span class="prompt">counter</span> and try to expel them before they act.</p>
+                </div>
+
+                <div class="tut-section">
+                  <h3>Chat</h3>
+                  <p>The <b>Chat</b> app has three tabs: Direct messages, a Public room everyone shares, and Groups you create yourself and invite people into.</p>
+                </div>
+
+                <div class="tut-section" id="tutAdminSection" style="display:none;">
+                  <h3>Superuser tools</h3>
+                  <p>You're a superuser. The <b>Admin Panel</b> app lets you set anyone's balance, mute or deactivate accounts, and clear malware off someone's account directly — all without needing their password.</p>
+                </div>
+
+                <button class="mini-btn" style="margin-top:6px;" onclick="closeApp('tutorial')">Got it</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ADMIN PANEL WINDOW (superuser only) -->
+          <div class="window" id="win-adminpanel" style="left:460px; top:60px; width:520px; height:560px;">
+            <div class="win-titlebar" onmousedown="startDrag(event,'win-adminpanel')" ondblclick="maximizeApp('adminpanel')">
+              <div class="win-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-shield-check"/></svg> Admin Panel</div>
+              <div class="win-controls">
+                <button class="win-btn min" onclick="minimizeApp('adminpanel')"></button>
+                <button class="win-btn max" onclick="maximizeApp('adminpanel')"></button>
+                <button class="win-btn close" onclick="closeApp('adminpanel')"></button>
+              </div>
+            </div>
+            <div class="win-body">
+              <div class="admin-app">
+                <div class="admin-stats-row" id="adminStats"></div>
+                <div class="ss-sub" style="margin:10px 0 6px;">Superuser tools — set balances, moderate, or clear an account's malware directly.</div>
+                <div class="user-error" id="adminUserError"></div>
+                <div class="user-list" id="adminUserList"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- SNAKE GAME WINDOW -->
           <div class="window" id="win-snake" style="left:300px; top:50px; width:420px; height:490px;">
             <div class="win-titlebar" onmousedown="startDrag(event,'win-snake')" ondblclick="maximizeApp('snake')">
@@ -1338,8 +1460,9 @@
             </div>
             <div class="win-body">
               <div class="game-app">
-                <div class="game-hud"><span>Score: <b id="snakeScore">0</b></span><span id="snakeStatus">Press Space to start</span></div>
+                <div class="game-hud"><span>Score: <b id="snakeScore">0</b> &nbsp; Best: <b id="snakeBest">0</b></span><span id="snakeStatus">Press Space to start</span></div>
                 <canvas id="snakeCanvas" width="378" height="378"></canvas>
+                <div class="game-hint">Arrows to move · Space to start/restart · P to pause</div>
               </div>
             </div>
           </div>
@@ -1356,9 +1479,9 @@
             </div>
             <div class="win-body">
               <div class="game-app">
-                <div class="game-hud"><span>Score: <b id="g2048Score">0</b></span><button class="files-tbtn" onclick="g2048New()">New Game</button></div>
+                <div class="game-hud"><span>Score: <b id="g2048Score">0</b> &nbsp; Best: <b id="g2048Best">0</b></span><span><button class="files-tbtn" id="g2048UndoBtn" onclick="g2048Undo()" disabled>Undo</button> <button class="files-tbtn" onclick="g2048New()">New Game</button></span></div>
                 <div class="g2048-grid" id="g2048Grid"></div>
-                <div class="game-hint">Arrow keys to play</div>
+                <div class="game-hint">Arrow keys to play — one undo per move</div>
               </div>
             </div>
           </div>
@@ -1377,6 +1500,8 @@
             <div class="sm-app" onclick="openApp('settings'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-gear"/></svg></div><div class="lbl">Settings</div></div>
             <div class="sm-app" onclick="openApp('chat'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chat"/></svg></div><div class="lbl">Chat</div></div>
             <div class="sm-app" onclick="openApp('bank'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bank"/></svg></div><div class="lbl">Bank</div></div>
+            <div class="sm-app" id="adminPanelNavItem" style="display:none;" onclick="openApp('adminpanel'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-shield-check"/></svg></div><div class="lbl">Admin Panel</div></div>
+            <div class="sm-app" onclick="openApp('tutorial'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-flask"/></svg></div><div class="lbl">Getting Started</div></div>
             <div class="sm-app" data-optional-app="firewall" onclick="openApp('firewall'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-shield-check"/></svg></div><div class="lbl">Firewall</div></div>
             <div class="sm-app" data-optional-app="antivirus" onclick="openApp('antivirus'); toggleFlyout('startMenu',false)"><div class="ico"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-bug"/></svg></div><div class="lbl">Antivirus</div></div>
           </div>
@@ -1437,8 +1562,8 @@
         <!-- TASKBAR -->
         <div class="taskbar">
           <div class="tb-start" onclick="toggleFlyout('startMenu')">
-            <div class="mark"></div>
-            <span>Aegis</span>
+            <svg class="mark" viewBox="0 0 48 48"><use href="#i-logo"/></svg>
+            <span>Zero Day</span>
           </div>
           <div class="tb-sep"></div>
           <div class="tb-apps" id="tbApps">
@@ -1540,10 +1665,10 @@
             </div>
             <div class="win-body" id="terminalBody" onclick="focusTermInput()">
               <div class="terminal-app" id="termOutput">
-                <div>Aegis Shell v1.0 — type <span class="prompt">help</span> to see what's wired up.</div>
+                <div>Zero Day Shell v1.0 — type <span class="prompt">help</span> to see what's wired up.</div>
               </div>
               <div class="term-inputline">
-                <span class="prompt">user@aegis</span>&nbsp;<span id="termPromptPath">~</span>&nbsp;$&nbsp;
+                <span class="prompt">user@zeroday</span>&nbsp;<span id="termPromptPath">~</span>&nbsp;$&nbsp;
                 <input id="termInput" class="term-input" autocomplete="off" spellcheck="false" onkeydown="termKeydown(event)" />
               </div>
             </div>
@@ -1591,12 +1716,12 @@
 
           <!-- freeze overlay -->
           <div class="freeze-overlay" id="freezeOverlay"></div>
-          <div class="freeze-toast" id="freezeToast"><div class="dotp"></div><div id="freezeToastText">Aegis OS isn't responding…</div></div>
+          <div class="freeze-toast" id="freezeToast"><div class="dotp"></div><div id="freezeToastText">Zero Day isn't responding…</div></div>
 
           <!-- crash overlay -->
           <div class="crash-overlay" id="crashOverlay">
             <div class="crash-face">:(</div>
-            <div class="crash-title">Aegis OS ran into a problem and needs to restart.</div>
+            <div class="crash-title">Zero Day ran into a problem and needs to restart.</div>
             <div class="crash-sub">We're just collecting some diagnostic information, then we'll restart for you. This is a simulated crash triggered from the test panel.</div>
             <div class="crash-meta">
               <div class="m"><b id="crashPct">0%</b>complete</div>
@@ -1605,20 +1730,6 @@
             <div class="crash-qr"></div>
           </div>
       <!-- ============ TOP-LEVEL WINDOWS & OVERLAYS (usable from any layer: desktop, boot, recovery) ============ -->
-
-      <!-- BIOS SETUP WINDOW (POST-only entry) -->
-      <div class="window" id="win-bios" style="left:350px; top:95px; width:600px; height:440px;">
-        <div class="win-titlebar" onmousedown="startDrag(event,'win-bios')">
-          <div class="win-title">▣ Aegis Firmware Setup</div><div class="win-controls"><button class="win-btn close" onclick="closeBiosSetup()"></button></div>
-        </div>
-        <div class="win-body"><div class="recovery-tools"><h2>Firmware Setup Utility</h2><div class="setup-intro">POST is paused. Review firmware information before continuing startup.</div>
-          <div class="recovery-check"><span>Firmware version</span><span class="result">Aegis Boot Firmware 1.0</span></div>
-          <div class="recovery-check"><span>Primary boot device</span><span class="result">AEGIS-SSD-512</span></div>
-          <div class="recovery-check"><span>Memory installed</span><span class="result">16384 MB</span></div>
-          <div class="recovery-check"><span>Boot mode</span><span class="result">UEFI compatible</span></div>
-          <button class="mini-btn" style="margin-top:18px;" onclick="closeBiosSetup()">Continue startup</button>
-        </div></div>
-      </div>
 
       <!-- RECOVERY TOOLKIT WINDOW -->
       <div class="window" id="win-recoverytools" style="left:520px; top:90px; width:520px; height:430px;">
@@ -1652,7 +1763,7 @@
 
               <div class="ss-pane active" id="ss-pane-startup">
                 <h2>Startup</h2>
-                <div class="ss-sub">These settings only apply to how Aegis OS boots — nothing here touches your desktop session.</div>
+                <div class="ss-sub">These settings only apply to how Zero Day boots — nothing here touches your desktop session.</div>
                 <div class="ss-row"><div><div class="lab">Startup mode</div><div class="sub">Normal boot</div></div><div class="sub">▾</div></div>
                 <div class="ss-row"><div><div class="lab">Safe mode</div><div class="sub">Load with drivers and startup apps disabled</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
                 <div class="ss-row"><div><div class="lab">Verbose boot logging</div><div class="sub">Show detailed status instead of the progress bar</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
@@ -1661,8 +1772,8 @@
 
               <div class="ss-pane" id="ss-pane-bootdevice">
                 <h2>Boot Device</h2>
-                <div class="ss-sub">Choose what Aegis OS should try to boot from, in order.</div>
-                <div class="ss-row"><div><div class="lab">1. Primary Drive</div><div class="sub">512GB SSD — Aegis OS Preclassic</div></div><div class="sub">Default</div></div>
+                <div class="ss-sub">Choose what Zero Day should try to boot from, in order.</div>
+                <div class="ss-row"><div><div class="lab">1. Primary Drive</div><div class="sub">512GB SSD — Zero Day Preclassic</div></div><div class="sub">Default</div></div>
                 <div class="ss-row"><div><div class="lab">2. USB Drive</div><div class="sub">Not connected</div></div><div class="sub">—</div></div>
                 <div class="ss-row"><div><div class="lab">3. Network Boot</div><div class="sub">PXE — SchoolNet-Guest</div></div><div class="sub">—</div></div>
               </div>
@@ -1678,14 +1789,13 @@
               <div class="ss-pane" id="ss-pane-recovery">
                 <h2>Recovery</h2>
                 <div class="ss-sub">Boot into a minimal environment with system tools — used when something's wrong and the normal desktop won't help.</div>
-                <div class="ss-row"><div><div class="lab">Aegis Recovery Environment</div><div class="sub">Terminal, diagnostics, version control, and system wipe</div></div><button class="mini-btn danger" onclick="enterRecoveryMode()">Enter Recovery Mode</button></div>
+                <div class="ss-row"><div><div class="lab">Zero Day Recovery Environment</div><div class="sub">Terminal, diagnostics, version control, and system wipe</div></div><button class="mini-btn danger" onclick="enterRecoveryMode()">Enter Recovery Mode</button></div>
               </div>
 
               <div class="ss-pane" id="ss-pane-about">
                 <h2>About Startup Settings</h2>
-                <div class="ss-row"><div class="lab">Firmware</div><div class="sub">Aegis Boot Firmware 1.0</div></div>
-                <div class="ss-row"><div class="lab">Access</div><div class="sub">Press any key 5 times during startup</div></div>
-                <div class="ss-row"><div class="lab">Note</div><div class="sub">Startup pauses while this window is open, and resumes when you close it.</div></div>
+                <div class="ss-row"><div class="lab">Access</div><div class="sub">From Recovery Mode — Power menu → Restart into Recovery → Startup Settings</div></div>
+                <div class="ss-row"><div class="lab">Note</div><div class="sub">Pressing any key 5 times during startup now skips straight past the loading screen instead.</div></div>
               </div>
 
             </div>
@@ -1707,8 +1817,8 @@
         <div class="win-body">
           <div class="recovery-app">
             <h2>Power Actions</h2>
-            <div class="rv-desc">Choose what Aegis OS should do next.</div>
-            <div class="rv-actionrow"><div><div class="lab">Continue to Aegis OS</div><div class="sub">Resume normal startup into the desktop</div></div><button class="mini-btn" onclick="continueFromRecovery()">Continue</button></div>
+            <div class="rv-desc">Choose what Zero Day should do next.</div>
+            <div class="rv-actionrow"><div><div class="lab">Continue to Zero Day</div><div class="sub">Resume normal startup into the desktop</div></div><button class="mini-btn" onclick="continueFromRecovery()">Continue</button></div>
             <div class="rv-actionrow"><div><div class="lab">Restart</div><div class="sub">Reboot the machine now</div></div><button class="mini-btn" onclick="closeApp('poweractions'); restartNow()">Restart</button></div>
             <div class="rv-actionrow"><div><div class="lab">Sleep</div><div class="sub">Low-power state</div></div><button class="mini-btn" onclick="closeApp('poweractions'); sleepNow()">Sleep</button></div>
             <div class="rv-actionrow"><div><div class="lab">Shut down</div><div class="sub">Power off completely</div></div><button class="mini-btn danger" onclick="closeApp('poweractions'); shutdownNow()">Shut down</button></div>
@@ -1727,8 +1837,8 @@
         <div class="win-body">
           <div class="recovery-app">
             <h2>Version Control</h2>
-            <div class="rv-desc">Restore Aegis OS to an earlier snapshot. This replaces the current system state.</div>
-            <div class="blist-row"><div class="rtitle">Aegis OS Preclassic — Build 1.0.0-demo</div><div class="rmeta">Current — active now</div></div>
+            <div class="rv-desc">Restore Zero Day to an earlier snapshot. This replaces the current system state.</div>
+            <div class="blist-row"><div class="rtitle">Zero Day Preclassic — Build 1.0.0-demo</div><div class="rmeta">Current — active now</div></div>
             <div class="blist-row"><div class="rtitle">Build 0.9.4</div><div class="rmeta">Snapshot — 3 days ago</div><button class="mini-btn" style="margin-top:8px;" onclick="versionRestore(this)">Restore</button></div>
             <div class="blist-row"><div class="rtitle">Build 0.9.1</div><div class="rmeta">Snapshot — 1 week ago</div><button class="mini-btn" style="margin-top:8px;" onclick="versionRestore(this)">Restore</button></div>
             <div class="blist-row"><div class="rtitle">Factory Image</div><div class="rmeta">Original install</div><button class="mini-btn" style="margin-top:8px;" onclick="versionRestore(this)">Restore</button></div>
@@ -1747,20 +1857,19 @@
         <div class="win-body">
           <div class="recovery-app">
             <h2>System Wipe</h2>
-            <div class="wipe-warn">This erases all user data, settings, and installed apps, then reinstalls core system files. This can't be undone.</div>
-            <div class="ss-sub" style="margin-bottom:8px;">Enter a superuser account and type <b style="color:var(--ink);">WIPE</b> to confirm.</div>
-            <input class="wipe-input" id="wipeAdminUser" placeholder="Superuser username" autocomplete="username" oninput="wipeInputCheck(this)">
-            <input class="wipe-input" id="wipeAdminPassword" type="password" placeholder="Superuser password" autocomplete="current-password" oninput="wipeInputCheck(this)">
+            <div class="wipe-warn">This erases your own account's files, settings, and installed apps, clears every infection on your account, then reinstalls your default starter files. This can't be undone — and only affects your account, no one else's.</div>
+            <div class="ss-sub" style="margin-bottom:8px;">Confirm your password and type <b style="color:var(--ink);">WIPE</b> to continue.</div>
+            <input class="wipe-input" id="wipeAdminPassword" type="password" placeholder="Your password" autocomplete="current-password" oninput="wipeInputCheck(this)">
             <input class="wipe-input" id="wipeConfirmInput" placeholder="Type WIPE" autocomplete="off" oninput="wipeInputCheck(this)">
             <div class="user-error" id="wipeError"></div>
-            <button class="mini-btn danger" id="wipeConfirmBtn" disabled onclick="systemWipeConfirm()">Erase everything</button>
+            <button class="mini-btn danger" id="wipeConfirmBtn" disabled onclick="systemWipeConfirm()">Erase my account</button>
           </div>
         </div>
       </div>
 
       <!-- system wipe full-screen overlay -->
       <div class="wipe-overlay" id="wipeOverlay">
-        <div class="w-title">Erasing Aegis OS…</div>
+        <div class="w-title">Erasing Zero Day…</div>
         <div class="wipe-bar-track"><div class="wipe-bar-fill" id="wipeBarFill" style="width:0%;"></div></div>
         <div class="w-status" id="wipeStatus">Erasing user data…</div>
       </div>
@@ -1815,7 +1924,7 @@
   /* ================= LIVE RESOLUTION READOUT (proof it's adjustable) ================= */
   const resTag = document.getElementById('resTag');
   function updateRes(){
-    resTag.textContent = 'Aegis OS · ' + window.innerWidth + ' × ' + window.innerHeight;
+    resTag.textContent = 'Zero Day · ' + window.innerWidth + ' × ' + window.innerHeight;
     resizeFullscreenWindows();
   }
   window.addEventListener('resize', updateRes);
@@ -1854,15 +1963,10 @@
   let postTimer = null;
 
   const postLinesText = [
-    'Aegis BIOS (C) Aegis Systems — Firmware v1.0.0',
-    'CPU: Aegis-Compatible x86_64 @ 3.20GHz — 8 cores',
+    'Zero Day BIOS (C) Prismonian Games — Firmware v1.0.0',
+    'CPU: ZeroDay-Compatible x86_64 @ 3.20GHz — 8 cores',
     'Memory Test: 16384MB ......... OK',
-    'Detecting Primary Master  ... AEGIS-SSD-512  OK',
-    'Detecting Primary Slave   ... None',
-    'Detecting Secondary Master... None',
-    'Initializing USB Controllers ... Done',
-    'Initializing Network Adapter ... Done',
-    ' ',
+    'Detecting Primary Master  ... ZERODAY-SSD-512  OK',
     'Booting from Primary Master...'
   ];
   function runPostSequence(callback){
@@ -1881,7 +1985,7 @@
           main.style.display = 'flex';
           playSfx('bootChime');
           callback();
-        }, 300);
+        }, 120);
         return;
       }
       const d = document.createElement('div');
@@ -1891,7 +1995,7 @@
       if(isOk) playSfx('postBeep');
       i++;
       postStep = next;
-      postTimer = setTimeout(next, 90 + Math.random() * 110);
+      postTimer = setTimeout(next, 25 + Math.random() * 35);
     }
     postStep = next;
     next();
@@ -1902,23 +2006,25 @@
     bootPaused = false;
     postPaused = false;
     resetBootKeyDots();
-    runPostSequence(runBootProgress);
+    const splash = document.getElementById('brandSplash');
+    splash.classList.remove('hide');
+    setTimeout(() => {
+      splash.classList.add('hide');
+      runPostSequence(runBootProgress);
+    }, 550);
   }
 
   function runBootProgress(){
     const fill = document.getElementById('bootFill');
     const status = document.getElementById('bootStatus');
-    fill.style.transition = 'width .22s linear';
+    fill.style.transition = 'width .15s linear';
     fill.style.width = '0%';
 
     const stages = [
       [0,  'Checking hardware…'],
-      [10, 'Loading system files…'],
-      [28, 'Starting services…'],
-      [48, 'Loading drivers…'],
-      [68, 'Preparing your desktop…'],
-      [78, 'This is taking longer than usual…'],
-      [93, 'Almost there…']
+      [25, 'Loading system files…'],
+      [55, 'Preparing your desktop…'],
+      [85, 'Almost there…']
     ];
     let pct = 0, stageIdx = 0;
     status.textContent = stages[0][1];
@@ -1926,13 +2032,11 @@
     function step(){
       if(bootPaused) return; // resumeBoot() will call bootStep() again when settings close
       if(pct >= 100){
-        setTimeout(showAuthScreen, 350);
+        setTimeout(showAuthScreen, 150);
         return;
       }
-      // the 78-93% band is a deliberate stall — every budget laptop has one
-      const inStall = pct >= 78 && pct < 93;
-      const inc = inStall ? (Math.random() * 1.1 + 0.2) : (Math.random() * 3.5 + 0.8);
-      const delay = inStall ? (Math.random() * 650 + 200) : (Math.random() * 220 + 120);
+      const inc = Math.random() * 9 + 5;
+      const delay = Math.random() * 50 + 25;
 
       pct = Math.min(100, pct + inc);
       fill.style.width = pct + '%';
@@ -1999,6 +2103,7 @@
     document.querySelector('.lock-username').textContent = currentUser.username;
     document.querySelector('.avatar').textContent = currentUser.username.charAt(0).toUpperCase();
     document.getElementById('usersNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
+    document.getElementById('adminPanelNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
     await loadPersistedState();
     await loadDesktopIcons();
     connectHackEvents();
@@ -2010,9 +2115,23 @@
       setLayer('layer-desktop');
       deskTopEnteredAt = Date.now();
       resetIdleTimer();
+      maybeShowTutorial();
     }, 750);
   }
   function lockNow(){ playSfx('lock'); disconnectHackEvents(); setLayer('layer-lock'); }
+
+  // Opens the Getting Started tutorial exactly once per account, the first
+  // time it ever reaches the desktop — via Sign Up or Sign In, whichever
+  // happens first — then never again unless reopened from the Start Menu.
+  async function maybeShowTutorial(){
+    const key = 'zeroday-tutorial-seen-' + currentUser.username;
+    try{
+      const saved = await window.storage.get(key, false);
+      if(saved && saved.value) return;
+    }catch(e){ /* not found — first time, fall through and show it */ }
+    openApp('tutorial');
+    window.storage.set(key, '1', false).catch(() => {});
+  }
 
   // If a superuser deactivates the signed-in account elsewhere, this catches
   // it within half a minute instead of leaving the session usable until the
@@ -2050,15 +2169,54 @@
         const mutedBadge = user.muted ? '<span class="user-status inactive">Muted</span>' : '';
         return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + ' · $' + user.balance.toLocaleString() + '</div>' + statusBadge + mutedBadge + '</div>' +
           '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' + toggleBtn + muteBtn +
+          '<button class="mini-btn" onclick="clearUserMalware(\'' + escapeAttr(user.id) + '\', \'' + escapeAttr(user.username) + '\')">Clear Malware</button>' +
           '<button class="mini-btn danger" onclick="deleteUser(\'' + escapeAttr(user.id) + '\')">Remove</button></div></div>';
       }).join('');
     }catch(e){ document.getElementById('userError').textContent = e.message; }
   }
+  async function loadAdminUsers(){
+    const list = document.getElementById('adminUserList');
+    if(!list || !currentUser || currentUser.role !== 'superuser') return;
+    try{
+      const res = await fetch('/api/users');
+      if(!res.ok) throw new Error('Could not load users');
+      const data = await res.json();
+      const totalBalance = data.users.reduce((sum, u) => sum + (u.balance || 0), 0);
+      const superuserCount = data.users.filter(u => u.role === 'superuser').length;
+      document.getElementById('adminStats').innerHTML =
+        '<div class="admin-stat"><div class="admin-stat-label">Accounts</div><div class="admin-stat-value">' + data.users.length + '</div></div>' +
+        '<div class="admin-stat"><div class="admin-stat-label">Currency in circulation</div><div class="admin-stat-value">' + bankFormatMoney(totalBalance) + '</div></div>' +
+        '<div class="admin-stat"><div class="admin-stat-label">Superusers</div><div class="admin-stat-value">' + superuserCount + '</div></div>';
+      list.innerHTML = data.users.map(user => {
+        const isSelf = user.id === currentUser.id;
+        const statusBadge = user.active === false
+          ? '<span class="user-status inactive">Deactivated</span>'
+          : '<span class="user-status active">Active</span>';
+        const toggleBtn = !isSelf
+          ? '<button class="mini-btn' + (user.active === false ? '' : ' danger') + '" onclick="toggleUserActive(\'' + escapeAttr(user.id) + '\', ' + (user.active === false) + ')">' + (user.active === false ? 'Reactivate' : 'Deactivate') + '</button>'
+          : '';
+        const muteBtn = !isSelf
+          ? '<button class="mini-btn' + (user.muted ? '' : ' danger') + '" onclick="toggleUserMuted(\'' + escapeAttr(user.id) + '\', ' + (!user.muted) + ')">' + (user.muted ? 'Unmute' : 'Mute') + '</button>'
+          : '';
+        const mutedBadge = user.muted ? '<span class="user-status inactive">Muted</span>' : '';
+        return '<div class="user-entry' + (user.active === false ? ' deactivated' : '') + '"><div class="user-meta"><div class="user-name">' + escapeHtml(user.username) + '</div><div class="user-role">' + escapeHtml(user.role) + ' · $' + user.balance.toLocaleString() + '</div>' + statusBadge + mutedBadge + '</div>' +
+          '<div class="user-actions"><button class="mini-btn" onclick="editUser(\'' + escapeAttr(user.id) + '\')">Edit</button>' + toggleBtn + muteBtn +
+          '<button class="mini-btn" onclick="clearUserMalware(\'' + escapeAttr(user.id) + '\', \'' + escapeAttr(user.username) + '\')">Clear Malware</button>' +
+          '<button class="mini-btn danger" onclick="deleteUser(\'' + escapeAttr(user.id) + '\')">Remove</button></div></div>';
+      }).join('');
+    }catch(e){ document.getElementById('adminUserError').textContent = e.message; }
+  }
+  // Settings > Users and the Admin Panel show the same account list — this
+  // refreshes whichever of the two happens to have a window open (both
+  // loadUsers()/loadAdminUsers() already no-op if their container isn't in
+  // the DOM, so calling both unconditionally is safe).
+  function refreshUserLists(){ loadUsers(); loadAdminUsers(); }
+
   async function toggleUserActive(id, reactivate){
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ active: reactivate }) });
     const data = await res.json();
     if(!res.ok){ showUserError(data.error); return; }
-    loadUsers();
+    refreshUserLists();
     showToast(reactivate ? 'User reactivated' : 'User deactivated');
   }
 
@@ -2066,8 +2224,17 @@
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ muted: mute }) });
     const data = await res.json();
     if(!res.ok){ showUserError(data.error); return; }
-    loadUsers();
+    refreshUserLists();
     showToast(mute ? 'User muted' : 'User unmuted');
+  }
+
+  async function clearUserMalware(id, username){
+    if(!confirm('Clear every infection on ' + username + '\'s account?')) return;
+    const res = await fetch('/api/users/' + encodeURIComponent(id) + '/clear-malware', { method:'POST' });
+    const data = await res.json();
+    if(!res.ok){ showUserError(data.error); return; }
+    refreshUserLists();
+    showToast(data.cleared > 0 ? ('Cleared ' + data.cleared + ' infection(s) from ' + username) : (username + ' had no infections'));
   }
 
   function showUserError(message){ document.getElementById('userError').textContent = message || ''; }
@@ -2078,7 +2245,7 @@
     })});
     const data = await res.json();
     if(!res.ok){ showUserError(data.error); return; }
-    event.target.reset(); loadUsers(); showToast('User added');
+    event.target.reset(); refreshUserLists(); showToast('User added');
   }
   async function editUser(id){
     const username = prompt('New username (leave blank to keep current):');
@@ -2098,14 +2265,14 @@
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     const data = await res.json();
     if(!res.ok){ showUserError(data.error); return; }
-    loadUsers(); showToast('User updated');
+    refreshUserLists(); showToast('User updated');
   }
   async function deleteUser(id){
     if(!confirm('Remove this user?')) return;
     const res = await fetch('/api/users/' + encodeURIComponent(id), { method:'DELETE' });
     const data = await res.json();
     if(!res.ok){ showUserError(data.error); return; }
-    loadUsers(); showToast('User removed');
+    refreshUserLists(); showToast('User removed');
   }
 
   /* ---- WINDOW MANAGEMENT ---- */
@@ -2191,6 +2358,11 @@
     if(id === 'bank') bankLoad();
     if(id === 'firewall') fwLoad();
     if(id === 'antivirus') avLoad();
+    if(id === 'adminpanel') loadAdminUsers();
+    if(id === 'tutorial'){
+      const adminSection = document.getElementById('tutAdminSection');
+      if(adminSection) adminSection.style.display = currentUser && currentUser.role === 'superuser' ? '' : 'none';
+    }
   }
   function closeApp(id){
     const w = document.getElementById('win-'+id);
@@ -2432,11 +2604,11 @@
     settings:{label:'Settings', icon:iconSvg('gear')}, browser:{label:'Browser', icon:iconSvg('globe')}, files:{label:'Files', icon:iconSvg('folder')},
     terminal:{label:'Terminal', icon:iconSvg('terminal')}, test:{label:'Test Functions', icon:iconSvg('flask')},
     startupSettings:{label:'Startup Settings', icon:iconSvg('shield')}, poweractions:{label:'Power Actions', icon:iconSvg('power')},
-    versioncontrol:{label:'Version Control', icon:'⧉'}, systemwipe:{label:'System Wipe', icon:'⨯'}, bios:{label:'Firmware Setup', icon:'▣'}, setup:{label:'Aegis OS Setup', icon:'✦'}, recoverytools:{label:'Recovery Diagnostics', icon:'◈'},
+    versioncontrol:{label:'Version Control', icon:'⧉'}, systemwipe:{label:'System Wipe', icon:'⨯'}, setup:{label:'Zero Day Setup', icon:'✦'}, recoverytools:{label:'Recovery Diagnostics', icon:'◈'},
     texteditor:{label:'Text Editor', icon:iconSvg('notepad')}, calculator:{label:'Calculator', icon:iconSvg('calculator')},
-    photos:{label:'Photo Viewer', icon:iconSvg('photo')}, appstore:{label:'App Store', icon:iconSvg('grid')}, ide:{label:'Aegis IDE', icon:'</>'}, writer:{label:'Writer', icon:iconSvg('document')}, sheets:{label:'Sheets', icon:iconSvg('grid')}, camera:{label:'Camera', icon:iconSvg('camera')}, monitor:{label:'System Monitor', icon:iconSvg('monitor')}, music:{label:'Music Player', icon:iconSvg('music-note')},
+    photos:{label:'Photo Viewer', icon:iconSvg('photo')}, appstore:{label:'App Store', icon:iconSvg('grid')}, ide:{label:'Zero Day IDE', icon:'</>'}, writer:{label:'Writer', icon:iconSvg('document')}, sheets:{label:'Sheets', icon:iconSvg('grid')}, camera:{label:'Camera', icon:iconSvg('camera')}, monitor:{label:'System Monitor', icon:iconSvg('monitor')}, music:{label:'Music Player', icon:iconSvg('music-note')},
     snake:{label:'Snake', icon:iconSvg('snake')}, g2048:{label:'2048', icon:iconSvg('grid')}, chat:{label:'Chat', icon:iconSvg('chat')},
-    bank:{label:'Bank', icon:iconSvg('bank')}, firewall:{label:'Firewall', icon:iconSvg('shield-check')}, antivirus:{label:'Antivirus', icon:iconSvg('bug')}
+    bank:{label:'Bank', icon:iconSvg('bank')}, firewall:{label:'Firewall', icon:iconSvg('shield-check')}, antivirus:{label:'Antivirus', icon:iconSvg('bug')}, adminpanel:{label:'Admin Panel', icon:iconSvg('shield-check')}, tutorial:{label:'Getting Started', icon:iconSvg('flask')}
   };
   let altTabActive = false, altTabIndex = 0;
   function getOpenWindowIds(){
@@ -2676,7 +2848,7 @@
     const toast = document.getElementById('freezeToast');
     const toastText = document.getElementById('freezeToastText');
     toast.classList.remove('ok');
-    toastText.textContent = "Aegis OS isn't responding…";
+    toastText.textContent = "Zero Day isn't responding…";
     ov.classList.add('show');
     toast.classList.add('show');
     playSfx('error');
@@ -2718,12 +2890,7 @@
 
   document.addEventListener('keydown', (e) => {
     if(!document.getElementById('layer-boot').classList.contains('active')) return;
-    if(document.getElementById('bootMainContent').style.display === 'none'){
-      if(!document.getElementById('win-bios').classList.contains('open')) openBiosSetup();
-      e.preventDefault();
-      return;
-    }
-    if(document.getElementById('win-startupSettings').classList.contains('open')) return; // already open
+    if(document.getElementById('bootMainContent').style.display === 'none') return; // still in POST, no gesture wired up there anymore
     bootKeyCount++;
     clearTimeout(bootKeyResetTimer);
     bootKeyResetTimer = setTimeout(resetBootKeyDots, 1400);
@@ -2731,21 +2898,18 @@
     dots.forEach((d, i) => d.classList.toggle('hit', i < bootKeyCount));
     if(bootKeyCount >= 5){
       resetBootKeyDots();
-      openStartupSettings();
+      skipBootLoading();
     }
   });
 
-  function openBiosSetup(){
+  function skipBootLoading(){
     postPaused = true;
+    bootPaused = true;
     clearTimeout(postTimer);
     document.getElementById('screen').classList.remove('system-loading');
-    openApp('bios');
-  }
-  function closeBiosSetup(){
-    closeApp('bios');
-    postPaused = false;
-    document.getElementById('screen').classList.add('system-loading');
-    if(postStep) postStep();
+    document.getElementById('postScreen').style.display = 'none';
+    document.getElementById('bootMainContent').style.display = 'flex';
+    showAuthScreen();
   }
 
   function openStartupSettings(){
@@ -2801,6 +2965,7 @@
     document.querySelector('.lock-username').textContent = currentUser.username;
     document.querySelector('.avatar').textContent = currentUser.username.charAt(0).toUpperCase();
     document.getElementById('usersNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
+    document.getElementById('adminPanelNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
     await loadPersistedState();
     await loadDesktopIcons();
     connectHackEvents();
@@ -2809,6 +2974,7 @@
     setLayer('layer-desktop');
     deskTopEnteredAt = Date.now();
     resetIdleTimer();
+    maybeShowTutorial();
   }
   document.getElementById('signupGoBtn').addEventListener('click', signUp);
   [signupUsernameInput, signupPasswordInput, signupConfirmInput].forEach(el => el.addEventListener('keydown', e => { if(e.key === 'Enter') signUp(); }));
@@ -2824,13 +2990,34 @@
   }
 
   /* ================= RECOVERY MODE ================= */
-  function enterRecoveryMode(){
+  // More severe malware on your own account makes Recovery Mode itself less
+  // reliable to reach — thematically, the moment you most need it (to clean
+  // up an infection) is the moment it's hardest to boot into. Tier 2+
+  // infections make it visibly glitch once you're in; tier 3+ additionally
+  // has a real chance of failing to load at all, kicking you back out.
+  async function enterRecoveryMode(){
     toggleFlyout('startMenu', false);
     toggleFlyout('powerMenu', false);
     closeApp('startupSettings');
     bootPaused = false;
+    let maxTier = 0;
+    try{
+      const res = await fetch('/api/hack/status');
+      if(res.ok){
+        const data = await res.json();
+        maxTier = (data.security.infections || []).reduce((max, inf) => Math.max(max, inf.malware ? inf.malware.tier : 0), 0);
+      }
+    }catch(e){ /* offline — treat as clean, don't block recovery over a network blip */ }
+
+    if(maxTier >= 3 && Math.random() < 0.45){
+      showTransition('Loading recovery environment…', 900, () => {
+        showToast('⚠ Recovery environment failed to initialize — filesystem errors detected. Try again, or clean your infections with avscan first.', 5000);
+      });
+      return;
+    }
     showTransition('Loading recovery environment…', 1200, () => {
       setLayer('layer-recovery');
+      document.getElementById('layer-recovery').classList.toggle('glitched', maxTier >= 2);
     });
   }
   function continueFromRecovery(){
@@ -2864,12 +3051,12 @@
 
   /* ---- System Wipe (recovery) ---- */
   function wipeInputCheck(el){
-    document.getElementById('wipeConfirmBtn').disabled = !(el.value.trim() === 'WIPE' && document.getElementById('wipeAdminUser').value.trim() && document.getElementById('wipeAdminPassword').value);
+    document.getElementById('wipeConfirmBtn').disabled = !(document.getElementById('wipeConfirmInput').value.trim() === 'WIPE' && document.getElementById('wipeAdminPassword').value);
   }
   async function systemWipeConfirm(){
     closeApp('systemwipe');
     const resetResponse = await fetch('/api/system/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
-      username: document.getElementById('wipeAdminUser').value.trim(), password: document.getElementById('wipeAdminPassword').value
+      password: document.getElementById('wipeAdminPassword').value
     })}).catch(() => null);
     if(!resetResponse || !resetResponse.ok){
       const data = resetResponse ? await resetResponse.json().catch(() => ({})) : {};
@@ -2900,7 +3087,6 @@
       document.getElementById('screen').classList.remove('system-loading');
       fill.style.width = '0%';
       document.getElementById('wipeConfirmInput').value = '';
-      document.getElementById('wipeAdminUser').value = '';
       document.getElementById('wipeAdminPassword').value = '';
       document.getElementById('wipeError').textContent = '';
       document.getElementById('wipeConfirmBtn').disabled = true;
@@ -2998,7 +3184,7 @@
     { id:'calculator', name:'Calculator', description:'A quick desktop calculator.' },
     { id:'photos', name:'Photo Viewer', description:'Browse images in your home.' },
     { id:'camera', name:'Camera', description:'Capture photos from your device camera.' },
-    { id:'ide', name:'Aegis IDE', description:'Write and preview your own HTML apps.' },
+    { id:'ide', name:'Zero Day IDE', description:'Write and preview your own HTML apps.' },
     { id:'writer', name:'Writer', description:'Create and save formatted notes.' },
     { id:'sheets', name:'Sheets', description:'Work with simple editable tables.' },
     { id:'firewall', name:'Firewall', description:'Manage your firewall level and per-port defense modules.' },
@@ -3075,7 +3261,7 @@
   function cameraDownload(){
     const canvas = document.getElementById('cameraCanvas');
     if(!canvas.width){ cameraCapture(); if(!canvas.width) return; }
-    const link = document.createElement('a'); link.download = 'aegis-photo-' + Date.now() + '.png'; link.href = canvas.toDataURL('image/png'); link.click();
+    const link = document.createElement('a'); link.download = 'zeroday-photo-' + Date.now() + '.png'; link.href = canvas.toDataURL('image/png'); link.click();
   }
 
   let monitorTimer = null;
@@ -3203,7 +3389,7 @@
         'Desktop':   { type:'folder', children:{} },
         'Documents': { type:'folder', children:{
           'todo.txt':  { type:'file', content:'- Try the terminal\n- Open Settings\n- Have fun\n' },
-          'readme.md': { type:'file', content:'# Aegis OS Preclassic\n\nThis is a demo build. Files you create here are real —\nthey persist across reloads and are shared between\nthe Files app and the Terminal.\n' }
+          'readme.md': { type:'file', content:'# Zero Day Preclassic\n\nThis is a demo build. Files you create here are real —\nthey persist across reloads and are shared between\nthe Files app and the Terminal.\n' }
         }},
         'Downloads': { type:'folder', children:{
           'build.zip': { type:'file', binary:true, content:'' }
@@ -4658,7 +4844,23 @@
   }
 
   /* ================= SNAKE ================= */
-  let snakeState = null;
+  let snakeState = null, snakeBest = 0;
+
+  async function claimGameReward(game, score){
+    try{
+      const res = await fetch('/api/games/reward', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ game, score }) });
+      const data = await res.json();
+      if(res.ok && data.reward > 0){ showToast('+' + bankFormatMoney(data.reward) + ' for that score!'); bankLoad(); }
+    }catch(e){ /* offline — no reward this run, not worth bothering the player about it */ }
+  }
+  async function loadSnakeBest(){
+    try{
+      const saved = await window.storage.get('zeroday-snake-best-' + currentUser.username, false);
+      snakeBest = saved && saved.value ? Number(saved.value) || 0 : 0;
+    }catch(e){ snakeBest = 0; }
+    document.getElementById('snakeBest').textContent = snakeBest;
+  }
+
   function snakeInit(){
     const canvas = document.getElementById('snakeCanvas');
     const ctx = canvas.getContext('2d');
@@ -4668,10 +4870,11 @@
       ctx, cell, cols, rows,
       snake: [{x:8,y:8},{x:7,y:8},{x:6,y:8}],
       dir:{x:1,y:0}, nextDir:{x:1,y:0},
-      food:{x:14,y:8}, score:0, running:false, gameOver:false, tickMs:130, timer:null
+      food:{x:14,y:8}, score:0, running:false, paused:false, gameOver:false, tickMs:130, timer:null
     };
     document.getElementById('snakeScore').textContent = '0';
     document.getElementById('snakeStatus').textContent = 'Press Space to start';
+    loadSnakeBest();
     snakeDraw();
   }
   function snakeRandFood(){
@@ -4682,10 +4885,17 @@
   }
   function snakeStart(){
     if(!snakeState || snakeState.running) return;
-    snakeState.running = true; snakeState.gameOver = false;
+    snakeState.running = true; snakeState.gameOver = false; snakeState.paused = false;
     document.getElementById('snakeStatus').textContent = 'Go!';
     clearInterval(snakeState.timer);
     snakeState.timer = setInterval(snakeTick, snakeState.tickMs);
+  }
+  function snakeTogglePause(){
+    const s = snakeState;
+    if(!s || !s.running) return;
+    s.paused = !s.paused;
+    if(s.paused){ clearInterval(s.timer); document.getElementById('snakeStatus').textContent = 'Paused — P to resume'; }
+    else { s.timer = setInterval(snakeTick, s.tickMs); document.getElementById('snakeStatus').textContent = 'Go!'; }
   }
   function snakeTick(){
     const s = snakeState;
@@ -4706,12 +4916,20 @@
     }
     snakeDraw();
   }
-  function snakeGameOver(){
+  async function snakeGameOver(){
     const s = snakeState;
     s.running = false; s.gameOver = true;
     clearInterval(s.timer);
-    document.getElementById('snakeStatus').textContent = 'Game over — press Space to restart';
     beep(180, 0.2);
+    let statusMsg = 'Game over — press Space to restart';
+    if(s.score > snakeBest){
+      snakeBest = s.score;
+      document.getElementById('snakeBest').textContent = snakeBest;
+      statusMsg = 'New best! ' + statusMsg;
+      window.storage.set('zeroday-snake-best-' + currentUser.username, String(snakeBest), false).catch(() => {});
+    }
+    document.getElementById('snakeStatus').textContent = statusMsg;
+    if(s.score > 0) claimGameReward('snake', s.score);
   }
   function snakeDraw(){
     const s = snakeState; const ctx = s.ctx;
@@ -4729,6 +4947,7 @@
     const dirs = { ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0} };
     if(dirs[e.key]){
       e.preventDefault();
+      if(snakeState.paused) return;
       const d = dirs[e.key];
       if(snakeState.dir.x !== -d.x || snakeState.dir.y !== -d.y) snakeState.nextDir = d;
       return;
@@ -4736,19 +4955,43 @@
     if(e.key === ' '){
       e.preventDefault();
       if(snakeState.gameOver || !snakeState.running){ snakeInit(); snakeStart(); }
+      return;
+    }
+    if(e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
+      e.preventDefault();
+      snakeTogglePause();
     }
   }
   document.addEventListener('keydown', snakeKeydown);
   function openSnake(){ openApp('snake'); snakeInit(); }
 
   /* ================= 2048 ================= */
-  let g2048State = null;
+  let g2048State = null, g2048Best = 0, g2048UndoState = null;
+  async function loadG2048Best(){
+    try{
+      const saved = await window.storage.get('zeroday-2048-best-' + currentUser.username, false);
+      g2048Best = saved && saved.value ? Number(saved.value) || 0 : 0;
+    }catch(e){ g2048Best = 0; }
+    document.getElementById('g2048Best').textContent = g2048Best;
+  }
   function g2048New(){
     g2048State = { grid: Array.from({length:4}, () => Array(4).fill(0)), score:0, over:false };
     g2048AddRandom(); g2048AddRandom();
     document.getElementById('g2048Score').textContent = '0';
+    g2048UndoState = null;
+    document.getElementById('g2048UndoBtn').disabled = true;
+    loadG2048Best();
     g2048Render();
     beep(500, 0.04);
+  }
+  function g2048Undo(){
+    if(!g2048UndoState) return;
+    g2048State = g2048UndoState;
+    g2048UndoState = null;
+    document.getElementById('g2048UndoBtn').disabled = true;
+    document.getElementById('g2048Score').textContent = g2048State.score;
+    g2048Render();
+    beep(420, 0.03);
   }
   function g2048AddRandom(){
     const empties = [];
@@ -4777,6 +5020,8 @@
   function g2048Move(dir){
     const g = g2048State;
     if(!g || g.over) return;
+    const beforeGrid = g.grid.map(r => r.slice());
+    const beforeScore = g.score;
     const rotate = (grid) => grid[0].map((_,c) => grid.map(row => row[c]));
     let grid = g.grid.map(r => r.slice());
     if(dir === 'left') grid = grid.map(row => g2048CompressRow(row, g));
@@ -4786,12 +5031,23 @@
     const moved = JSON.stringify(grid) !== JSON.stringify(g.grid);
     g.grid = grid;
     if(moved){
+      g2048UndoState = { grid: beforeGrid, score: beforeScore, over: false };
+      document.getElementById('g2048UndoBtn').disabled = false;
       g2048AddRandom();
       document.getElementById('g2048Score').textContent = g.score;
       beep(500, 0.03);
     }
     g2048Render();
-    if(g2048CheckOver()){ g.over = true; showToast('2048 — no more moves. Click New Game to try again.'); }
+    if(g2048CheckOver()){
+      g.over = true;
+      showToast('2048 — no more moves. Click New Game to try again.');
+      if(g.score > g2048Best){
+        g2048Best = g.score;
+        document.getElementById('g2048Best').textContent = g2048Best;
+        window.storage.set('zeroday-2048-best-' + currentUser.username, String(g2048Best), false).catch(() => {});
+      }
+      if(g.score > 0) claimGameReward('g2048', g.score);
+    }
   }
   function g2048CheckOver(){
     const g = g2048State.grid;
@@ -4829,7 +5085,7 @@
   function termKeydown(e){
     if(e.key === 'Enter'){
       const raw = termInput.value;
-      printLine('<span class="prompt">user@aegis</span>&nbsp;' + termPromptText() + '&nbsp;$&nbsp;' + escapeHtml(raw));
+      printLine('<span class="prompt">user@zeroday</span>&nbsp;' + termPromptText() + '&nbsp;$&nbsp;' + escapeHtml(raw));
       if(raw.trim() !== ''){ termHistory.push(raw); persistTermHistory(); }
       termHistIdx = termHistory.length;
       runCommand(raw.trim());
@@ -4883,7 +5139,7 @@
       case 'whoami': printLine('user (standard account)'); break;
       case 'date': printLine(new Date().toString()); break;
       case 'sysinfo':
-        printLine('Aegis OS 1.0.0-demo · ' + window.innerWidth + '×' + window.innerHeight + ' · uptime ' + document.getElementById('aboutUptime').textContent);
+        printLine('Zero Day 1.0.0-demo · ' + window.innerWidth + '×' + window.innerHeight + ' · uptime ' + document.getElementById('aboutUptime').textContent);
         break;
       case 'pwd': printLine(fsCwd.join('/')); break;
       case 'ls': {
@@ -5030,7 +5286,7 @@
   function browserEnsureInit(){
     if(browserInited) return;
     browserInited = true;
-    newTab('aegis://home');
+    newTab('zeroday://home');
   }
 
   function currentBrowserTab(){ return browserTabs.find(t => t.id === browserActiveId); }
@@ -5047,7 +5303,7 @@
   function closeTab(id, e){
     if(e) e.stopPropagation();
     browserTabs = browserTabs.filter(t => t.id !== id);
-    if(browserTabs.length === 0){ newTab('aegis://home'); return; }
+    if(browserTabs.length === 0){ newTab('zeroday://home'); return; }
     if(browserActiveId === id) browserActiveId = browserTabs[browserTabs.length - 1].id;
     renderTabs();
     navigate(currentBrowserTab().url, false);
@@ -5066,15 +5322,15 @@
         '<span class="tlabel">' + escapeHtml(t.title) + '</span>' +
         '<span class="tclose" onclick="closeTab(\'' + t.id + '\', event)">×</span>' +
       '</div>'
-    ).join('') + '<div class="browser-newtab" onclick="newTab(\'aegis://home\')" title="New tab">+</div>';
+    ).join('') + '<div class="browser-newtab" onclick="newTab(\'zeroday://home\')" title="New tab">+</div>';
   }
 
   function browserGo(raw){
     let url = raw.trim();
     if(url === '') return;
-    if(!url.startsWith('aegis://') && !/^https?:\/\//i.test(url)){
+    if(!url.startsWith('zeroday://') && !/^https?:\/\//i.test(url)){
       const looksLikeDomain = /^[\w-]+(\.[\w-]+)+(\/.*)?$/.test(url) && !url.includes(' ');
-      url = looksLikeDomain ? ('https://' + url) : ('aegis://search?q=' + encodeURIComponent(url));
+      url = looksLikeDomain ? ('https://' + url) : ('zeroday://search?q=' + encodeURIComponent(url));
     }
     navigate(url, true);
   }
@@ -5254,23 +5510,23 @@
   }
 
   function getPageContent(url){
-    if(!networkConnected && !url.startsWith('aegis://')){
+    if(!networkConnected && !url.startsWith('zeroday://')){
       beep(300, 0.08);
       return { title: 'Offline', html:
         '<div class="bpage-inner berror">' +
           '<div class="bpage-title">You\'re not connected to a network</div>' +
-          '<div class="rmeta">Wi-Fi is turned off in Settings → Network. Internal aegis:// pages still work offline.</div>' +
+          '<div class="rmeta">Wi-Fi is turned off in Settings → Network. Internal zeroday:// pages still work offline.</div>' +
           '<button class="bpage-btn" onclick="document.getElementById(\'toggle-network\').click(); openApp(\'settings\'); showSettingsPane(\'network\')">Open network settings</button>' +
         '</div>' };
     }
 
-    if(url.startsWith('aegis://search')){
+    if(url.startsWith('zeroday://search')){
       const q = decodeURIComponent((url.split('q=')[1] || '')).replace(/\+/g,' ');
       const fake = [
-        ['Getting started with Aegis OS', 'aegis://about'],
-        [q + ' — overview and common questions', 'aegis://home'],
-        ['Community notes on “' + q + '”', 'aegis://home'],
-        ['Related: troubleshooting slow boots', 'aegis://about']
+        ['Getting started with Zero Day', 'zeroday://about'],
+        [q + ' — overview and common questions', 'zeroday://home'],
+        ['Community notes on “' + q + '”', 'zeroday://home'],
+        ['Related: troubleshooting slow boots', 'zeroday://about']
       ];
       return { title: 'Search: ' + q, html:
         '<div class="bpage-inner">' +
@@ -5280,19 +5536,19 @@
     }
 
     switch(url){
-      case 'aegis://home':
+      case 'zeroday://home':
         return { title: 'New Tab', html:
-          '<div class="browser-logo">aegis</div>' +
+          '<div class="browser-logo">zeroday</div>' +
           '<input class="browser-search" placeholder="Search, or type a real address like wikipedia.org" onkeydown="if(event.key===\'Enter\') bsearchSubmit(this)">' +
           '<div class="browser-shortcuts">' +
-            '<div class="bshort" onclick="navigate(\'aegis://news\',true)"><div class="ico">' + iconSvg('newspaper') + '</div><div class="lbl">News</div></div>' +
-            '<div class="bshort" onclick="navigate(\'aegis://games\',true)"><div class="ico">' + iconSvg('controller') + '</div><div class="lbl">Games</div></div>' +
-            '<div class="bshort" onclick="navigate(\'aegis://mail\',true)"><div class="ico">' + iconSvg('mail') + '</div><div class="lbl">Mail</div></div>' +
-            '<div class="bshort" onclick="navigate(\'aegis://files\',true)"><div class="ico">' + iconSvg('folder') + '</div><div class="lbl">Files</div></div>' +
-            '<div class="bshort" onclick="newTab(\'aegis://home\')"><div class="ico">' + iconSvg('plus') + '</div><div class="lbl">New tab</div></div>' +
+            '<div class="bshort" onclick="navigate(\'zeroday://news\',true)"><div class="ico">' + iconSvg('newspaper') + '</div><div class="lbl">News</div></div>' +
+            '<div class="bshort" onclick="navigate(\'zeroday://games\',true)"><div class="ico">' + iconSvg('controller') + '</div><div class="lbl">Games</div></div>' +
+            '<div class="bshort" onclick="navigate(\'zeroday://mail\',true)"><div class="ico">' + iconSvg('mail') + '</div><div class="lbl">Mail</div></div>' +
+            '<div class="bshort" onclick="navigate(\'zeroday://files\',true)"><div class="ico">' + iconSvg('folder') + '</div><div class="lbl">Files</div></div>' +
+            '<div class="bshort" onclick="newTab(\'zeroday://home\')"><div class="ico">' + iconSvg('plus') + '</div><div class="lbl">New tab</div></div>' +
           '</div>' };
 
-      case 'aegis://news':
+      case 'zeroday://news':
         return { title: 'News', html:
           '<div class="bpage-inner">' +
             '<div class="bpage-title">Local headlines</div>' +
@@ -5302,7 +5558,7 @@
             '<div class="blist-row"><div class="rtitle">New OS update promises fewer crashes, students skeptical</div><div class="rmeta">Campus Wire · demo content</div></div>' +
           '</div>' };
 
-      case 'aegis://games':
+      case 'zeroday://games':
         return { title: 'Games', html:
           '<div class="bpage-inner">' +
             '<div class="bpage-title">Game library</div>' +
@@ -5317,16 +5573,16 @@
             '<div class="rmeta">Snake and 2048 open for real. The rest are just demo tiles.</div>' +
           '</div>' };
 
-      case 'aegis://mail':
+      case 'zeroday://mail':
         return { title: 'Mail', html:
           '<div class="bpage-inner">' +
             '<div class="bpage-title">Inbox (3)</div>' +
             '<div class="blist-row"><div class="rtitle">IT Dept — Password reset reminder</div><div class="rmeta">Your password expires in 4 days</div></div>' +
             '<div class="blist-row"><div class="rtitle">Library — Overdue notice</div><div class="rmeta">1 item due back tomorrow</div></div>' +
-            '<div class="blist-row"><div class="rtitle">Aegis Team — Welcome to Aegis OS</div><div class="rmeta">Thanks for trying the demo</div></div>' +
+            '<div class="blist-row"><div class="rtitle">Zero Day Team — Welcome to Zero Day</div><div class="rmeta">Thanks for trying the demo</div></div>' +
           '</div>' };
 
-      case 'aegis://files':
+      case 'zeroday://files':
         return { title: 'Files', html:
           '<div class="bpage-inner">' +
             '<div class="bpage-title">Files</div>' +
@@ -5334,7 +5590,7 @@
             '<button class="bpage-btn" onclick="openApp(\'files\')">Open Files</button>' +
           '</div>' };
 
-      case 'aegis://settings':
+      case 'zeroday://settings':
         return { title: 'Settings', html:
           '<div class="bpage-inner">' +
             '<div class="bpage-title">Settings</div>' +
@@ -5342,11 +5598,11 @@
             '<button class="bpage-btn" onclick="openApp(\'settings\')">Open Settings</button>' +
           '</div>' };
 
-      case 'aegis://about':
-        return { title: 'About Aegis', html:
+      case 'zeroday://about':
+        return { title: 'About Zero Day', html:
           '<div class="bpage-inner">' +
-            '<div class="bpage-title">About Aegis Browser</div>' +
-            '<div class="rmeta">Full Page mode routes through this server\'s own /proxy route — it fetches the target itself, strips the headers that block iframe embedding, and injects a base tag so styling, scripts, and images load directly from the real site. Reader Mode is a lighter text-only fallback for sites that still refuse to render. Addresses starting with aegis:// are local pages built into this demo.</div>' +
+            '<div class="bpage-title">About Zero Day Browser</div>' +
+            '<div class="rmeta">Full Page mode routes through this server\'s own /proxy route — it fetches the target itself, strips the headers that block iframe embedding, and injects a base tag so styling, scripts, and images load directly from the real site. Reader Mode is a lighter text-only fallback for sites that still refuse to render. Addresses starting with zeroday:// are local pages built into this demo.</div>' +
           '</div>' };
 
       default:
@@ -5354,9 +5610,9 @@
         return { title: 'Can\'t be reached', html:
           '<div class="bpage-inner berror">' +
             '<div class="bpage-title">This site can\'t be reached</div>' +
-            '<div class="rmeta">"' + escapeHtml(url) + '" isn\'t a page this demo knows about. Only aegis:// addresses resolve here.</div>' +
+            '<div class="rmeta">"' + escapeHtml(url) + '" isn\'t a page this demo knows about. Only zeroday:// addresses resolve here.</div>' +
             '<div class="code">ERR_DEMO_NO_EXTERNAL_NETWORK</div>' +
-            '<button class="bpage-btn" onclick="navigate(\'aegis://search?q=\' + encodeURIComponent(\'' + url.replace(/'/g, "\\'") + '\'), true)">Search instead</button>' +
+            '<button class="bpage-btn" onclick="navigate(\'zeroday://search?q=\' + encodeURIComponent(\'' + url.replace(/'/g, "\\'") + '\'), true)">Search instead</button>' +
           '</div>' };
     }
   }

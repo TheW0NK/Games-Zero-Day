@@ -2001,6 +2001,7 @@
     document.getElementById('usersNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
     await loadPersistedState();
     await loadDesktopIcons();
+    connectHackEvents();
     playSfx('unlockSuccess');
     lock.classList.add('unlocking');
     setTimeout(() => {
@@ -2011,7 +2012,7 @@
       resetIdleTimer();
     }, 750);
   }
-  function lockNow(){ playSfx('lock'); setLayer('layer-lock'); }
+  function lockNow(){ playSfx('lock'); disconnectHackEvents(); setLayer('layer-lock'); }
 
   // If a superuser deactivates the signed-in account elsewhere, this catches
   // it within half a minute instead of leaving the session usable until the
@@ -2802,6 +2803,7 @@
     document.getElementById('usersNavItem').style.display = currentUser.role === 'superuser' ? '' : 'none';
     await loadPersistedState();
     await loadDesktopIcons();
+    connectHackEvents();
     playSfx('unlockSuccess');
     signupPasswordInput.value = ''; signupConfirmInput.value = '';
     setLayer('layer-desktop');
@@ -4390,7 +4392,7 @@
   // in keeping with the genre (`scan`, `exploit`, `deploy`, …). A lightweight
   // poll keeps players honest about knowing they've been hit even with the
   // Terminal closed, by watching their own security log for new entries.
-  let hackLastSeenLogAt = null, hackLastSeenAnnoy = 0, hackStatusPrimed = false;
+  let hackLastSeenLogAt = null, hackLastSeenAnnoy = 0, hackStatusPrimed = false, hackLastAlertedAt = 0;
 
   function hackMalwareCard(m){
     return '<b>' + escapeHtml(m.name) + '</b> <span class="prompt">[' + m.category + ' · tier ' + m.tier + ']</span> — $' + m.cost + '<br>' +
@@ -4408,7 +4410,13 @@
       if(hackStatusPrimed){
         (sec.log || []).forEach(entry => {
           if(hackLastSeenLogAt && entry.at <= hackLastSeenLogAt) return;
-          if(entry.action === 'exploit-success') showToast('⚠ ' + entry.by + ' breached your system.');
+          if(entry.action === 'exploit-success'){
+            // the real-time under-attack SSE alert already covers this
+            // moment with a more actionable message — don't clobber it a
+            // few hundred ms later with this generic version, only fall
+            // back to it if that alert never actually fired (e.g. SSE down).
+            if(Date.now() - hackLastAlertedAt > 3000) showToast('⚠ ' + entry.by + ' breached your system.');
+          }
           else if(entry.action && entry.action.startsWith('deploy:')) showToast('⚠ ' + entry.by + ' installed malware on your account.');
           else if(entry.action === 'theft') showToast('⚠ ' + entry.by + ' stole ' + bankFormatMoney(entry.amount || 0) + ' from you.');
         });
@@ -4422,6 +4430,28 @@
     }catch(e){ /* offline — try again next tick */ }
   }
   setInterval(hackPollStatus, 15000);
+
+  // Real-time push — the 15s poll above stays as a fallback (covers a
+  // dropped connection or a page that loaded before this ran), but this is
+  // what actually makes the under-attack window usable: a 45s reaction
+  // window is pointless if you only find out about it on the next poll tick.
+  let hackEventSource = null;
+  function connectHackEvents(){
+    if(hackEventSource || !currentUser) return;
+    hackEventSource = new EventSource('/api/events');
+    hackEventSource.onmessage = (e) => {
+      let evt; try{ evt = JSON.parse(e.data); }catch(err){ return; }
+      if(evt.type === 'under-attack'){
+        hackLastAlertedAt = Date.now();
+        showToast('⚠ ' + (evt.by ? evt.by + ' is' : 'Someone is') + ' breaching you right now! Type counter in Terminal — ' + evt.expiresIn + 's.', 8000);
+      }
+      hackPollStatus();
+    };
+    hackEventSource.onerror = () => { /* EventSource auto-reconnects on its own */ };
+  }
+  function disconnectHackEvents(){
+    if(hackEventSource){ hackEventSource.close(); hackEventSource = null; }
+  }
 
   async function termScan(username){
     if(!username){ printLine('usage: scan &lt;username&gt;', 'err'); return; }
@@ -4464,10 +4494,48 @@
       const res = await fetch('/api/hack/exploit', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ target: username, port: Number(portStr), approach }) });
       const data = await res.json();
       if(!res.ok){ printLine('exploit: ' + (data.error || 'failed'), 'err'); return; }
-      if(data.success) printLine('Breach successful (' + data.chance + '% odds). You have ' + data.breachExpiresIn + 's — try <span class="prompt">steal</span> or <span class="prompt">deploy &lt;malware&gt;</span>.');
-      else printLine('Exploit failed (' + data.chance + '% odds). Their defenses held.', 'err');
+      if(data.viaBackdoor) printLine('Backdoor already in place — you\'re straight in. You have ' + data.breachExpiresIn + 's — try <span class="prompt">steal</span> or <span class="prompt">deploy &lt;malware&gt;</span>.');
+      else printLine('Breach puzzle started — crack the ' + data.codeLength + '-digit code (' + data.digitRange + ' each) in ' + data.maxGuesses + ' tries, ' + data.expiresIn + 's on the clock.<br>&nbsp;&nbsp;<span class="prompt">guess n n n n</span> to try a code, <span class="prompt">puzzle</span> to see where you left off.');
       bankLoad();
     }catch(e){ printLine('exploit: could not reach the server', 'err'); }
+  }
+  async function termGuess(parts){
+    const guess = parts.map(Number);
+    if(guess.length !== 4 || guess.some(n => !Number.isInteger(n) || n < 1 || n > 6)){ printLine('usage: guess &lt;n&gt; &lt;n&gt; &lt;n&gt; &lt;n&gt; — four numbers, each 1-6', 'err'); return; }
+    try{
+      const res = await fetch('/api/hack/guess', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ guess }) });
+      const data = await res.json();
+      if(!res.ok){ printLine('guess: ' + (data.error || 'failed'), 'err'); return; }
+      if(data.cracked){ printLine('4 exact — you\'re in! You have ' + data.breachExpiresIn + 's — try <span class="prompt">steal</span> or <span class="prompt">deploy &lt;malware&gt;</span>.'); bankLoad(); return; }
+      if(data.failed){ printLine(data.exact + ' exact, ' + data.partial + ' partial — out of tries. Breach failed.', 'err'); return; }
+      printLine(data.exact + ' exact, ' + data.partial + ' partial (' + data.guessesLeft + ' tries left)');
+    }catch(e){ printLine('guess: could not reach the server', 'err'); }
+  }
+  async function termPuzzleStatus(){
+    try{
+      const res = await fetch('/api/hack/puzzle');
+      const data = await res.json();
+      if(!res.ok){ printLine('puzzle: ' + (data.error || 'failed'), 'err'); return; }
+      const history = data.guesses.length ? data.guesses.map(g => g.guess.join(' ') + ' → ' + g.exact + ' exact, ' + g.partial + ' partial').join('<br>&nbsp;&nbsp;') : '(no guesses yet)';
+      printLine('Breach in progress vs ' + escapeHtml(data.target) + ' — ' + data.guessesLeft + ' tries left, ' + data.expiresIn + 's on the clock<br>&nbsp;&nbsp;' + history);
+    }catch(e){ printLine('puzzle: could not reach the server', 'err'); }
+  }
+  async function termCounter(){
+    try{
+      const res = await fetch('/api/hack/counter', { method:'POST' });
+      const data = await res.json();
+      if(!res.ok){ printLine('counter: ' + (data.error || 'failed'), 'err'); return; }
+      if(data.success) printLine('Countered! ' + escapeHtml(data.expelled) + ' was expelled from your system (' + data.chance + '% odds).');
+      else printLine('Counter failed (' + data.chance + '% odds) — they\'re still in.', 'err');
+    }catch(e){ printLine('counter: could not reach the server', 'err'); }
+  }
+  async function termLeaderboard(){
+    try{
+      const res = await fetch('/api/bank/leaderboard');
+      const data = await res.json();
+      if(!res.ok){ printLine('leaderboard: ' + (data.error || 'failed'), 'err'); return; }
+      printLine('Top balances:<br>&nbsp;&nbsp;' + data.leaderboard.map((u, i) => (i + 1) + '. ' + escapeHtml(u.username) + ' — ' + bankFormatMoney(u.balance)).join('<br>&nbsp;&nbsp;'));
+    }catch(e){ printLine('leaderboard: could not reach the server', 'err'); }
   }
   async function termSteal(){
     try{
@@ -4802,11 +4870,13 @@
           '&nbsp;&nbsp;<span class="prompt">echo &lt;text&gt;</span>, <span class="prompt">clear</span>, <span class="prompt">history</span><br>' +
           '&nbsp;&nbsp;<b>Hacking</b> — <span class="prompt">targets</span>, <span class="prompt">scan &lt;user&gt;</span>, <span class="prompt">deepscan &lt;user&gt;</span> ($75, reveals modules)<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">exploit &lt;user&gt; &lt;port&gt; &lt;bruteforce|stealth|injection&gt;</span> ($20/try) — bruteforce beats decoy, loses to ratelimiter; stealth beats ratelimiter, loses to sentinel; injection beats sentinel, loses to decoy<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;starts a code-breaking puzzle instead of an instant roll — <span class="prompt">guess n n n n</span> (1-6 each) to crack it, <span class="prompt">puzzle</span> to check your progress<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">counter</span> — while under attack (real-time alert), fight back and try to expel them before they act<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">steal</span>, <span class="prompt">deploy &lt;malware&gt;</span>, <span class="prompt">avscan</span>, <span class="prompt">secstatus</span>, <span class="prompt">dossier &lt;user&gt;</span>, <span class="prompt">malware</span> — malware catalog<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;</span> ($150) — install your own defense module<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span> — smaller, general-purpose edge<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;steal/drain payouts scale with the target\'s security % (shown in scan/secstatus) — 0% security means nothing to steal and no ransomware<br>' +
-          '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span><br>' +
+          '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span>, <span class="prompt">leaderboard</span><br>' +
           '&nbsp;&nbsp;<b>Superuser</b> — <span class="prompt">setbalance &lt;user&gt; &lt;amount&gt;</span> — also available from Settings &gt; Users &gt; Edit'
         );
         break;
@@ -4924,6 +4994,10 @@
       case 'deepscan': termDeepScan(parts[1]); break;
       case 'secure': termSecure(parts[1], parts[2]); break;
       case 'exploit': termExploit(parts[1], parts[2], parts[3]); break;
+      case 'guess': termGuess(parts.slice(1)); break;
+      case 'puzzle': termPuzzleStatus(); break;
+      case 'counter': termCounter(); break;
+      case 'leaderboard': case 'top': termLeaderboard(); break;
       case 'steal': termSteal(); break;
       case 'deploy': termDeploy(parts[1]); break;
       case 'avscan': termAvscan(); break;

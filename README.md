@@ -95,21 +95,25 @@ Then open http://localhost:3000
   <bruteforce|stealth|injection>` ($20/attempt) — and the three approaches
   and three modules form a closed counter triangle (bruteforce beats decoy
   but loses to ratelimiter; stealth beats ratelimiter but loses to sentinel;
-  injection beats sentinel but loses to decoy), so success comes from
-  reading (or paying to reveal) a target's setup and picking the right
-  counter, not from grinding a single stat. Firewall/antivirus levels
-  (`firewall upgrade`, `antivirus upgrade`) only shift the odds a few points
-  either way, and every roll — even with a persistent backdoor installed —
-  is clamped between 10% and 90%, so no combination of purchases ever
-  guarantees or forecloses an outcome. A successful breach opens a 2-minute
-  window to `steal` money or `deploy <malware>` — see `malware` for the full
-  catalog of viruses, trojans, worms, ransomware, spyware, rootkits, adware,
-  and a botnet client, each with a real mechanical effect (balance drain, a
-  persistent backdoor, an account-locking ransom, log-hiding, remote
-  monitoring, or firewall weakening). `avscan` tries to clean your own
-  infections; `secstatus` shows your own security profile, installed
-  modules, and intrusion log. Every account's security profile lives
-  alongside its user record.
+  injection beats sentinel but loses to decoy). Picking the right counter
+  (or paying for a `deepscan`) doesn't win the breach outright, though —
+  `exploit` starts a Mastermind-style code-breaking puzzle (`guess n n n n`,
+  four digits 1-6, exact/partial feedback) instead of an instant dice roll.
+  The matchup and firewall differential still matter, but now they set the
+  puzzle's difficulty (3 guesses on a bad matchup, up to 8 on a great one)
+  rather than being the whole outcome — cracking it is real, repeatable
+  skill. A persistent backdoor infection skips the puzzle entirely (instant
+  breach); everything else clamps between the 3-8 guess range, so no
+  purchase ever makes a breach automatic or impossible. A successful breach
+  opens a 2-minute window to `steal` money or `deploy <malware>` — see
+  `malware` for the full catalog of viruses, trojans, worms, ransomware,
+  spyware, rootkits, adware, and a botnet client, each with a real
+  mechanical effect (balance drain, a persistent backdoor, an
+  account-locking ransom, log-hiding, remote monitoring, firewall
+  weakening, or jamming the target's ability to counter). `avscan` tries to
+  clean your own infections; `secstatus` shows your own security profile,
+  installed modules, and intrusion log. Every account's security profile
+  lives alongside its user record.
   Payouts are gated by a **security percentage** (`securityPercent` in
   `server.js`) — the equally-weighted average of firewall level, antivirus
   level, and the fraction of your own ports carrying an installed module,
@@ -120,6 +124,16 @@ Then open http://localhost:3000
   brand-new players alone and go after well-defended (presumably richer)
   targets instead. It's shown in `scan`, `deepscan`, `secstatus`, and the
   Firewall app.
+  A breach isn't purely one-sided, either: the moment a puzzle is cracked
+  (or a backdoor lets someone straight in), the target gets pushed a
+  real-time alert over Server-Sent Events (`GET /api/events`) — no polling
+  delay — with a 45-second window to `counter`. Countering is a chance
+  check (antivirus vs. the attacker's firewall) that, on success, expels
+  them before they can act; Silencer-type malware installed on you blocks
+  countering until you clean it off with `avscan`. A cloak-type infection
+  (Nullroot/Hollowman) suppresses this alert entirely for that attacker —
+  full stealth, not just a hidden log entry. `leaderboard` (or `top`) shows
+  the ten richest active accounts.
   The **Firewall** and **Antivirus** App Store
   apps are GUI front-ends for the same `/api/hack/*` endpoints (level
   upgrades, per-port modules, scanning) if you'd rather not use the

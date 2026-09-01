@@ -38,6 +38,27 @@ const STARTING_BALANCE = 2500;
 // Keyed by attacker user id.
 const activeBreaches = new Map();
 const exploitCooldowns = new Map();
+// A breach puzzle in progress, keyed by attacker id — starting a new one
+// (via exploit) overwrites/forfeits any unfinished attempt.
+const pendingPuzzles = new Map();
+// A live "you're currently being breached, fight back now" window, keyed by
+// the *target's* user id — this is what the SSE push and the `counter`
+// command both key off of.
+const underAttackWindows = new Map();
+const counterCooldowns = new Map();
+
+// Real-time push: one Set of open SSE responses per username. Purely a
+// "wake up and refetch now" signal — the actual event data (log entries,
+// infections, balance) is still fetched normally through /api/hack/status;
+// this just removes the up-to-15s polling delay for anything time-sensitive
+// like the under-attack counter window.
+const sseClients = new Map();
+function pushEvent(username, event) {
+  const clients = sseClients.get(username);
+  if (!clients || !clients.size) return;
+  const payload = 'data: ' + JSON.stringify(event) + '\n\n';
+  for (const res of clients) { try { res.write(payload); } catch (e) { /* client gone, GC'd on close */ } }
+}
 
 /* ---------------- default starter filesystem ---------------- */
 
@@ -162,7 +183,8 @@ const MALWARE_CATALOG = [
   { id: 'hollowman', name: 'Hollowman', category: 'rootkit', tier: 2, cost: 320, mechanic: 'cloak', effect: 'Hides your future intrusions on this target from their security log.', description: 'A lighter-weight rootkit — less thorough than Nullroot, still keeps you off the record.' },
   { id: 'ghostkey', name: 'Ghostkey', category: 'spyware', tier: 2, cost: 300, mechanic: 'monitor', effect: 'Lets you check this target\'s dossier anytime, no re-scan needed.', description: 'A keylogger and session-watcher that phones your dossier updates home.' },
   { id: 'whispernet', name: 'Whispernet', category: 'spyware', tier: 1, cost: 180, mechanic: 'monitor', effect: 'Lets you check this target\'s dossier anytime, no re-scan needed.', description: 'A lighter spyware kit for keeping tabs on a target without paying for Ghostkey.' },
-  { id: 'junkstream', name: 'Junkstream', category: 'adware', tier: 1, cost: 60, mechanic: 'nuisance', effect: 'Floods the target with pop-up spam next time they\'re online. Cosmetic.', description: 'Cheap, obnoxious, and mostly harmless — buys you nothing but the satisfaction of annoying someone.' }
+  { id: 'junkstream', name: 'Junkstream', category: 'adware', tier: 1, cost: 60, mechanic: 'nuisance', effect: 'Floods the target with pop-up spam next time they\'re online. Cosmetic.', description: 'Cheap, obnoxious, and mostly harmless — buys you nothing but the satisfaction of annoying someone.' },
+  { id: 'silencer', name: 'Silencer', category: 'trojan', tier: 2, cost: 260, mechanic: 'jam', effect: 'Blocks the target from countering a live breach while this infection remains installed.', description: 'Cuts the alarm wires before the break-in — the target can still see they\'re being hit, they just can\'t fight back until they clean this off.' }
 ];
 
 function malwareById(id) {
@@ -247,16 +269,24 @@ function recordTransaction(from, to, amount, type, note = '') {
   return entry;
 }
 
+// True if `byUsername` currently has an installed infection on `security`
+// with the given mechanic — shared by the cloak check (hides log entries
+// and the real-time under-attack alert), the backdoor check (auto-cracks
+// future breach puzzles), and the jam check (blocks countering).
+function hasInfectionMechanic(security, byUsername, mechanic) {
+  return (security.infections || []).some(inf => {
+    const malware = malwareById(inf.malwareId);
+    return malware && malware.mechanic === mechanic && inf.by === byUsername;
+  });
+}
+
 // Persists `users` unconditionally — this is where deploy/steal/exploit
 // hand off their in-memory balance and infection mutations to disk, whether
 // or not the log entry itself ends up recorded.
 function recordSecurityLog(users, targetUser, entry) {
   // A cloak-type infection installed by this same attacker on this same
   // target suppresses the record — that's the entire point of a rootkit.
-  const cloaked = (targetUser.security.infections || []).some(inf => {
-    const malware = malwareById(inf.malwareId);
-    return malware && malware.mechanic === 'cloak' && inf.by === entry.by;
-  });
+  const cloaked = entry.by && hasInfectionMechanic(targetUser.security, entry.by, 'cloak');
   if (!cloaked || !entry.by) {
     targetUser.security.log = targetUser.security.log || [];
     targetUser.security.log.push({ id: crypto.randomUUID(), ...entry, at: new Date().toISOString() });
@@ -915,6 +945,15 @@ app.get('/api/bank/account', requireAuth, (req, res) => {
   res.json({ balance: user.balance, ransom: (user.security && user.security.ransom) || null, transactions });
 });
 
+app.get('/api/bank/leaderboard', requireAuth, (req, res) => {
+  const leaderboard = ensureEconomyFields(loadUsers())
+    .filter(user => user.active !== false)
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 10)
+    .map(user => ({ username: user.username, balance: user.balance }));
+  res.json({ leaderboard });
+});
+
 app.post('/api/bank/transfer', requireAuth, (req, res) => {
   const { to, amount, note } = req.body || {};
   const cleanAmount = Math.floor(Number(amount));
@@ -952,6 +991,22 @@ app.post('/api/bank/pay-ransom', requireAuth, (req, res) => {
 });
 
 /* ---------------- cybersecurity & hacking ---------------- */
+
+// Real-time channel a client opens once after signing in. Every event is
+// just a nudge to refetch — see the comment on sseClients/pushEvent above.
+app.get('/api/events', requireAuth, (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+  res.write('\n');
+  const username = req.user.username;
+  if (!sseClients.has(username)) sseClients.set(username, new Set());
+  sseClients.get(username).add(res);
+  const keepAlive = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) { /* connection already gone */ } }, 25000);
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    const clients = sseClients.get(username);
+    if (clients) { clients.delete(res); if (!clients.size) sseClients.delete(username); }
+  });
+});
 
 app.get('/api/hack/targets', requireAuth, (req, res) => {
   const targets = loadUsers()
@@ -1038,6 +1093,49 @@ app.get('/api/hack/deepscan/:username', requireAuth, (req, res) => {
   });
 });
 
+// Shared by both ways a breach can actually open: an instant backdoor
+// short-circuit, or cracking a puzzle. Opens the attacker's activeBreach
+// window, opens the target's live under-attack window (unless the attacker
+// is cloaked on this target, in which case the whole thing stays invisible
+// to the target — the point of a rootkit), and pushes a real-time alert.
+function triggerBreach(users, attacker, target) {
+  activeBreaches.set(attacker.id, { target: target.username, expiresAt: Date.now() + 120000 });
+  recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-success' });
+  recordActivity('hack-exploit-success', attacker.username, 'vs ' + target.username);
+  const cloaked = hasInfectionMechanic(target.security, attacker.username, 'cloak');
+  if (!cloaked) {
+    const expiresAt = Date.now() + 45000;
+    underAttackWindows.set(target.id, { by: attacker.username, expiresAt });
+    pushEvent(target.username, { type: 'under-attack', by: attacker.username, expiresIn: 45 });
+  } else {
+    pushEvent(target.username, { type: 'refresh' });
+  }
+}
+
+// A code-breaking mini-puzzle stands in for a flat dice roll: the module
+// counter matchup and firewall differential still matter, but now they set
+// the puzzle's difficulty (how many guesses you get) rather than being the
+// whole outcome — cracking it is real, repeatable skill (Mastermind-style
+// deduction), not a memorized percentage.
+function newBreachCode() {
+  return Array.from({ length: 4 }, () => 1 + Math.floor(Math.random() * 6));
+}
+function scoreGuess(code, guess) {
+  let exact = 0;
+  const codeLeft = [], guessLeft = [];
+  for (let i = 0; i < 4; i++) {
+    if (guess[i] === code[i]) exact++;
+    else { codeLeft.push(code[i]); guessLeft.push(guess[i]); }
+  }
+  let partial = 0;
+  const used = [...codeLeft];
+  for (const g of guessLeft) {
+    const idx = used.indexOf(g);
+    if (idx !== -1) { partial++; used.splice(idx, 1); }
+  }
+  return { exact, partial };
+}
+
 app.post('/api/hack/exploit', requireAuth, (req, res) => {
   const { target: targetName, port, approach } = req.body || {};
   const cleanPort = Number(port);
@@ -1054,34 +1152,103 @@ app.post('/api/hack/exploit', requireAuth, (req, res) => {
   exploitCooldowns.set(attacker.id, Date.now());
   attacker.balance -= EXPLOIT_COST;
 
-  const hasBackdoor = (target.security.infections || []).some(inf => {
-    const malware = malwareById(inf.malwareId);
-    return malware && malware.mechanic === 'backdoor' && inf.by === attacker.username;
-  });
-
-  let chance;
+  const hasBackdoor = hasInfectionMechanic(target.security, attacker.username, 'backdoor');
   if (hasBackdoor) {
-    chance = MAX_CHANCE;
-  } else {
-    const module = target.security.modules[cleanPort];
-    let base;
-    if (!module) base = 50;
-    else if (APPROACH_BEATS_MODULE[approach] === module) base = 78;
-    else if (APPROACH_LOSES_TO_MODULE[approach] === module) base = 22;
-    else base = 50; // shouldn't happen with only 3 modules, but keep a sane fallback
-    chance = clampChance(base + (attacker.security.firewall - target.security.firewall) * 3);
+    pendingPuzzles.delete(attacker.id);
+    triggerBreach(users, attacker, target);
+    return res.json({ viaBackdoor: true, breachExpiresIn: 120, balance: attacker.balance });
   }
-  const success = Math.random() * 100 < chance;
 
-  if (success) {
-    activeBreaches.set(attacker.id, { target: target.username, expiresAt: Date.now() + 120000 });
-    recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-success' });
-    recordActivity('hack-exploit-success', attacker.username, 'vs ' + target.username);
-    return res.json({ success: true, chance, breachExpiresIn: 120, balance: attacker.balance });
+  const module = target.security.modules[cleanPort];
+  let base;
+  if (!module) base = 50;
+  else if (APPROACH_BEATS_MODULE[approach] === module) base = 78;
+  else if (APPROACH_LOSES_TO_MODULE[approach] === module) base = 22;
+  else base = 50; // shouldn't happen with only 3 modules, but keep a sane fallback
+  const chance = clampChance(base + (attacker.security.firewall - target.security.firewall) * 3);
+  const maxGuesses = Math.round(3 + ((chance - MIN_CHANCE) / (MAX_CHANCE - MIN_CHANCE)) * 5); // 3 (hardest) .. 8 (easiest)
+
+  pendingPuzzles.set(attacker.id, {
+    target: target.username, port: cleanPort, approach, code: newBreachCode(),
+    maxGuesses, guesses: [], expiresAt: Date.now() + 90000
+  });
+  saveUsers(users); // persist the EXPLOIT_COST deduction
+  res.json({ puzzle: true, maxGuesses, codeLength: 4, digitRange: '1-6', expiresIn: 90, balance: attacker.balance });
+});
+
+function requirePendingPuzzle(req, res) {
+  const puzzle = pendingPuzzles.get(req.user.id);
+  if (!puzzle || puzzle.expiresAt < Date.now()) {
+    pendingPuzzles.delete(req.user.id);
+    res.status(403).json({ error: 'No breach attempt in progress — exploit a target first' });
+    return null;
   }
-  recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-failed' });
-  recordActivity('hack-exploit-failed', attacker.username, 'vs ' + target.username);
-  res.json({ success: false, chance, balance: attacker.balance });
+  return puzzle;
+}
+
+app.get('/api/hack/puzzle', requireAuth, (req, res) => {
+  const puzzle = requirePendingPuzzle(req, res);
+  if (!puzzle) return;
+  res.json({
+    target: puzzle.target, port: puzzle.port, approach: puzzle.approach,
+    maxGuesses: puzzle.maxGuesses, guesses: puzzle.guesses,
+    guessesLeft: puzzle.maxGuesses - puzzle.guesses.length,
+    expiresIn: Math.max(0, Math.round((puzzle.expiresAt - Date.now()) / 1000))
+  });
+});
+
+app.post('/api/hack/guess', requireAuth, (req, res) => {
+  const puzzle = requirePendingPuzzle(req, res);
+  if (!puzzle) return;
+  const guess = Array.isArray(req.body && req.body.guess) ? req.body.guess.map(Number) : null;
+  if (!guess || guess.length !== 4 || guess.some(n => !Number.isInteger(n) || n < 1 || n > 6)) {
+    return res.status(400).json({ error: 'Guess must be 4 numbers, each 1-6' });
+  }
+  const users = ensureEconomyFields(loadUsers());
+  const attacker = users.find(candidate => candidate.id === req.user.id);
+  const target = users.find(candidate => candidate.username === puzzle.target);
+  if (!target) { pendingPuzzles.delete(attacker.id); return res.status(404).json({ error: 'Target no longer exists' }); }
+
+  const { exact, partial } = scoreGuess(puzzle.code, guess);
+  puzzle.guesses.push({ guess, exact, partial });
+
+  if (exact === 4) {
+    pendingPuzzles.delete(attacker.id);
+    triggerBreach(users, attacker, target);
+    return res.json({ cracked: true, exact, partial, breachExpiresIn: 120 });
+  }
+  if (puzzle.guesses.length >= puzzle.maxGuesses) {
+    pendingPuzzles.delete(attacker.id);
+    recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-failed' });
+    recordActivity('hack-exploit-failed', attacker.username, 'vs ' + target.username);
+    return res.json({ cracked: false, failed: true, exact, partial, guessesLeft: 0 });
+  }
+  res.json({ cracked: false, failed: false, exact, partial, guessesLeft: puzzle.maxGuesses - puzzle.guesses.length });
+});
+
+app.post('/api/hack/counter', requireAuth, (req, res) => {
+  const users = ensureEconomyFields(loadUsers());
+  const target = users.find(candidate => candidate.id === req.user.id);
+  const window = underAttackWindows.get(target.id);
+  if (!window || window.expiresAt < Date.now()) {
+    underAttackWindows.delete(target.id);
+    return res.status(403).json({ error: "You're not currently under attack" });
+  }
+  if (hasInfectionMechanic(target.security, window.by, 'jam')) return res.status(403).json({ error: 'Your countermeasures are jammed — run avscan to clear it first' });
+  const lastCounter = counterCooldowns.get(target.id) || 0;
+  if (Date.now() - lastCounter < 5000) return res.status(429).json({ error: 'Give it a moment before trying again' });
+  counterCooldowns.set(target.id, Date.now());
+
+  const attacker = users.find(candidate => candidate.username === window.by);
+  const chance = clampChance(50 + (target.security.antivirus - (attacker ? attacker.security.firewall : 1)) * 5);
+  const success = Math.random() * 100 < chance;
+  if (success && attacker) {
+    activeBreaches.delete(attacker.id);
+    underAttackWindows.delete(target.id);
+    recordActivity('hack-countered', target.username, 'expelled ' + attacker.username);
+    return res.json({ success: true, chance, expelled: window.by });
+  }
+  res.json({ success: false, chance });
 });
 
 function requireActiveBreach(req, res, users) {
@@ -1108,9 +1275,11 @@ app.post('/api/hack/steal', requireAuth, (req, res) => {
   target.balance -= amount;
   attacker.balance += amount;
   activeBreaches.delete(attacker.id);
+  underAttackWindows.delete(target.id);
   if (amount > 0) recordTransaction(target.username, attacker.username, amount, 'theft');
   recordSecurityLog(users, target, { by: attacker.username, action: 'theft', amount });
   recordActivity('hack-steal', attacker.username, 'from ' + target.username + ' — $' + amount);
+  pushEvent(target.username, { type: 'refresh' });
   res.json({ amount, balance: attacker.balance });
 });
 
@@ -1148,12 +1317,14 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   } else if (malware.mechanic === 'nuisance') {
     target.security.pendingAnnoy = (target.security.pendingAnnoy || 0) + 1;
   }
-  // 'backdoor', 'cloak', and 'monitor' are passive — checked elsewhere
-  // (exploit, recordSecurityLog, and dossier lookups respectively) for as
-  // long as the infection stays in the target's infections list.
+  // 'backdoor', 'cloak', 'monitor', and 'jam' are passive — checked
+  // elsewhere (exploit, recordSecurityLog, dossier lookups, and counter
+  // respectively) for as long as the infection stays in the target's
+  // infections list.
 
   recordSecurityLog(users, target, { by: attacker.username, action: 'deploy:' + malware.id });
   recordActivity('hack-deploy', attacker.username, malware.name + ' vs ' + target.username);
+  pushEvent(target.username, { type: 'refresh' });
   res.json({ ok: true, note: resultNote, balance: attacker.balance });
 });
 

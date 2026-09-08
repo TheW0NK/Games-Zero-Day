@@ -30,6 +30,7 @@ const GROUPS_FILE = path.join(__dirname, 'data', 'groups.json');
 const GROUP_MESSAGES_FILE = path.join(__dirname, 'data', 'group-messages.json');
 const BANK_FILE = path.join(__dirname, 'data', 'bank.json');
 const AGE_FLAGS_FILE = path.join(__dirname, 'data', 'age-flags.json');
+const SERVERS_FILE = path.join(__dirname, 'data', 'servers.json');
 const sessions = new Map();
 const startedAt = Date.now();
 const STARTING_BALANCE = 2500;
@@ -1563,6 +1564,253 @@ app.get('/api/hack/dossier/:username', requireAuth, (req, res) => {
   });
   if (!canMonitor) return res.status(403).json({ error: 'No monitoring malware installed on this target' });
   res.json({ username: target.username, balance: target.balance, ...publicSecurity(target) });
+});
+
+/* ---------------- servers ---------------- */
+/* A "server" is a persistent, owned criminal outfit players build up over    */
+/* time — distinct from the ad-hoc chat `groups` above. Membership is a       */
+/* four-rank ladder (intern < staff < admin < owner) and joining always goes  */
+/* through a pending invite the invitee has to accept, never an instant add.  */
+/* This section only covers the roster/ownership/payout-split scaffolding;    */
+/* botnet income and the multi-player breach mechanic build on top of it      */
+/* later and aren't here yet.                                                */
+
+const SERVER_SETUP_COST = 5000;
+const SERVER_ROLES = ['intern', 'staff', 'admin', 'owner'];
+const SERVER_ROLE_RANK = { intern: 0, staff: 1, admin: 2, owner: 3 };
+// A starting suggestion only — the owner can repoint these at any time via
+// PUT /api/servers/:id/payouts, with no floor or enforced sum.
+const DEFAULT_PAYOUT_SPLITS = { intern: 10, staff: 25, admin: 15, owner: 50 };
+
+function readServers() {
+  try { return JSON.parse(fs.readFileSync(SERVERS_FILE, 'utf8')); } catch (e) { return []; }
+}
+function saveServers(servers) {
+  fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2) + '\n');
+}
+
+function serverMember(server, username) {
+  return server.members.find(m => m.username === username);
+}
+// -1 for a non-member so every rank comparison below (e.g. "actor outranks
+// target") just works without a separate membership check first.
+function serverRoleRank(server, username) {
+  const member = serverMember(server, username);
+  return member ? SERVER_ROLE_RANK[member.role] : -1;
+}
+
+function loadServerOr404(req, res) {
+  const server = readServers().find(s => s.id === req.params.id);
+  if (!server) { res.status(404).json({ error: 'Server not found' }); return null; }
+  return server;
+}
+
+app.get('/api/servers', requireAuth, (req, res) => {
+  const servers = readServers()
+    .filter(s => serverMember(s, req.user.username))
+    .map(s => ({ id: s.id, name: s.name, ownerUsername: s.ownerUsername, memberCount: s.members.length, role: serverMember(s, req.user.username).role, treasury: s.treasury }));
+  res.json({ servers });
+});
+
+app.get('/api/servers/all', requireAuth, requireSuperuser, (req, res) => {
+  res.json({ servers: readServers() });
+});
+
+// Every pending invite addressed to the current user, across all servers —
+// this is what the "Invites" tab in the Servers app polls.
+app.get('/api/servers/invites/mine', requireAuth, (req, res) => {
+  const invites = [];
+  for (const server of readServers()) {
+    for (const invite of server.invites) {
+      if (invite.username === req.user.username) {
+        invites.push({ ...invite, serverId: server.id, serverName: server.name });
+      }
+    }
+  }
+  res.json({ invites });
+});
+
+app.get('/api/servers/:id', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (!serverMember(server, req.user.username) && req.user.role !== 'superuser') {
+    return res.status(403).json({ error: 'You are not a member of this server' });
+  }
+  res.json({ server });
+});
+
+app.post('/api/servers', requireAuth, (req, res) => {
+  const cleanName = String((req.body && req.body.name) || '').trim().slice(0, 60);
+  if (!cleanName) return res.status(400).json({ error: 'Give the server a name' });
+  const users = ensureEconomyFields(loadUsers());
+  const founder = users.find(u => u.id === req.user.id);
+  if (founder.balance < SERVER_SETUP_COST) {
+    return res.status(400).json({ error: `Setting up a server costs $${SERVER_SETUP_COST} — you don't have enough` });
+  }
+  founder.balance -= SERVER_SETUP_COST;
+  saveUsers(users);
+  const server = {
+    id: crypto.randomUUID(),
+    name: cleanName,
+    ownerId: founder.id,
+    ownerUsername: founder.username,
+    createdAt: new Date().toISOString(),
+    treasury: 0,
+    payoutSplits: { ...DEFAULT_PAYOUT_SPLITS },
+    members: [{ userId: founder.id, username: founder.username, role: 'owner', invitedBy: null, joinedAt: new Date().toISOString() }],
+    invites: [],
+    botnet: [],
+    security: { firewall: 1, antivirus: 1, modules: {} },
+    securityLog: []
+  };
+  const servers = readServers();
+  servers.push(server);
+  saveServers(servers);
+  recordActivity('server-created', founder.username, cleanName);
+  res.status(201).json({ server });
+});
+
+// Disbanding is the only way an owner leaves — there's no ownership
+// transfer yet, so removing the owner any other way would strand the
+// server. The treasury is forfeited, not refunded; that's deliberate,
+// same "high risk" framing as everything else the server touches.
+app.delete('/api/servers/:id', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (server.ownerUsername !== req.user.username && req.user.role !== 'superuser') {
+    return res.status(403).json({ error: 'Only the server owner can disband it' });
+  }
+  saveServers(readServers().filter(s => s.id !== server.id));
+  recordActivity('server-disbanded', req.user.username, server.name);
+  res.json({ deleted: true });
+});
+
+app.post('/api/servers/:id/invites', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const actorRank = serverRoleRank(server, req.user.username);
+  if (actorRank < SERVER_ROLE_RANK.admin) return res.status(403).json({ error: 'Only admins and the owner can invite members' });
+  const { username, role } = req.body || {};
+  const cleanRole = String(role || 'intern');
+  if (!['intern', 'staff', 'admin'].includes(cleanRole)) return res.status(400).json({ error: 'Invalid role' });
+  // Admins can only bring in interns/staff — granting admin is owner-only.
+  if (cleanRole === 'admin' && actorRank < SERVER_ROLE_RANK.owner) {
+    return res.status(403).json({ error: 'Only the owner can invite someone directly as admin' });
+  }
+  const target = loadUsers().find(u => u.username === String(username || '').trim());
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (serverMember(server, target.username)) return res.status(400).json({ error: 'Already a member' });
+  if (server.invites.some(i => i.username === target.username)) return res.status(400).json({ error: 'Already invited — waiting on a response' });
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  liveServer.invites.push({ id: crypto.randomUUID(), username: target.username, role: cleanRole, invitedBy: req.user.username, invitedAt: new Date().toISOString() });
+  saveServers(servers);
+  recordActivity('server-invite-sent', req.user.username, target.username + ' -> ' + server.name);
+  res.json({ server: liveServer });
+});
+
+// Same endpoint covers both directions: an admin/owner revoking an invite
+// they no longer want out there, and the invited player declining it —
+// either way the pending invite just goes away.
+app.delete('/api/servers/:id/invites/:inviteId', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const invite = server.invites.find(i => i.id === req.params.inviteId);
+  if (!invite) return res.status(404).json({ error: 'Invite not found' });
+  const actorRank = serverRoleRank(server, req.user.username);
+  const isInvitee = invite.username === req.user.username;
+  if (!isInvitee && actorRank < SERVER_ROLE_RANK.admin) {
+    return res.status(403).json({ error: "You can't revoke this invite" });
+  }
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  liveServer.invites = liveServer.invites.filter(i => i.id !== req.params.inviteId);
+  saveServers(servers);
+  res.json({ server: liveServer });
+});
+
+app.post('/api/servers/:id/invites/:inviteId/accept', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const invite = server.invites.find(i => i.id === req.params.inviteId);
+  if (!invite) return res.status(404).json({ error: 'Invite not found' });
+  if (invite.username !== req.user.username) return res.status(403).json({ error: 'This invite is not yours' });
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  liveServer.invites = liveServer.invites.filter(i => i.id !== invite.id);
+  if (!serverMember(liveServer, req.user.username)) {
+    liveServer.members.push({ userId: req.user.id, username: req.user.username, role: invite.role, invitedBy: invite.invitedBy, joinedAt: new Date().toISOString() });
+  }
+  saveServers(servers);
+  recordActivity('server-invite-accepted', req.user.username, liveServer.name + ' as ' + invite.role);
+  res.json({ server: liveServer });
+});
+
+app.put('/api/servers/:id/members/:username/role', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const actorRank = serverRoleRank(server, req.user.username);
+  if (actorRank < SERVER_ROLE_RANK.admin) return res.status(403).json({ error: 'Only admins and the owner can change roles' });
+  const target = serverMember(server, req.params.username);
+  if (!target) return res.status(404).json({ error: 'Not a member of this server' });
+  if (target.role === 'owner') return res.status(400).json({ error: "The owner's role can't be changed — disband or leave the role as-is" });
+  const { role } = req.body || {};
+  if (!['intern', 'staff', 'admin'].includes(String(role || ''))) return res.status(400).json({ error: 'Invalid role' });
+  const targetRank = SERVER_ROLE_RANK[target.role];
+  // Admins can promote/demote within intern<->staff, but can't touch another
+  // admin or hand out admin themselves — only the owner grants admin rank.
+  if (actorRank < SERVER_ROLE_RANK.owner && (targetRank >= SERVER_ROLE_RANK.admin || role === 'admin')) {
+    return res.status(403).json({ error: 'Only the owner can promote to or change an admin' });
+  }
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  serverMember(liveServer, req.params.username).role = role;
+  saveServers(servers);
+  recordActivity('server-role-changed', req.user.username, req.params.username + ' -> ' + role + ' in ' + server.name);
+  res.json({ server: liveServer });
+});
+
+app.delete('/api/servers/:id/members/:username', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const target = serverMember(server, req.params.username);
+  if (!target) return res.status(404).json({ error: 'Not a member of this server' });
+  const isSelf = req.params.username === req.user.username;
+  if (target.role === 'owner') {
+    return res.status(400).json({ error: "The owner can't be removed — disband the server instead" });
+  }
+  if (!isSelf) {
+    const actorRank = serverRoleRank(server, req.user.username);
+    const targetRank = SERVER_ROLE_RANK[target.role];
+    if (actorRank < SERVER_ROLE_RANK.admin || actorRank <= targetRank) {
+      return res.status(403).json({ error: "You don't have permission to remove this member" });
+    }
+  }
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  liveServer.members = liveServer.members.filter(m => m.username !== req.params.username);
+  saveServers(servers);
+  recordActivity('server-member-removed', req.user.username, req.params.username + ' from ' + server.name);
+  res.json({ server: liveServer });
+});
+
+app.put('/api/servers/:id/payouts', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (server.ownerUsername !== req.user.username) return res.status(403).json({ error: 'Only the owner can set payout splits' });
+  const splits = (req.body && req.body.payoutSplits) || {};
+  const clean = {};
+  for (const role of SERVER_ROLES) {
+    const value = Number(splits[role]);
+    if (!Number.isFinite(value) || value < 0) return res.status(400).json({ error: 'Each split must be a number 0 or higher' });
+    clean[role] = value;
+  }
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  liveServer.payoutSplits = clean;
+  saveServers(servers);
+  recordActivity('server-payouts-updated', req.user.username, server.name);
+  res.json({ server: liveServer });
 });
 
 /* ---------------- real filesystem API ---------------- */

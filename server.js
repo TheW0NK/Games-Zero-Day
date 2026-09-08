@@ -1487,7 +1487,7 @@ app.post('/api/hack/steal', requireAuth, (req, res) => {
 });
 
 app.post('/api/hack/deploy', requireAuth, (req, res) => {
-  const { malwareId } = req.body || {};
+  const { malwareId, serverId } = req.body || {};
   const malware = malwareById(String(malwareId || ''));
   if (!malware) return res.status(400).json({ error: 'Unknown malware — check `malware list`' });
   const users = ensureEconomyFields(loadUsers());
@@ -1497,8 +1497,28 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   const targetSecPct = securityPercent(target.security);
   if (malware.mechanic === 'lockdown' && targetSecPct === 0) return res.status(400).json({ error: "This target hasn't invested in any security — there's nothing for ransomware to lock down" });
   if (attacker.balance < malware.cost) return res.status(400).json({ error: 'Not enough funds — ' + malware.name + ' costs $' + malware.cost });
+
+  // Botnet-category malware (currently just Botfly) also conscripts the
+  // target into one of the attacker's servers' botnets, on top of its
+  // usual personal-backdoor effect — pick which server up front so a bad
+  // or ambiguous choice fails before any money changes hands. Not being in
+  // a server at all is fine; deploy just skips the botnet side entirely.
+  let creditServer = null;
+  if (malware.category === 'botnet') {
+    const myServers = readServers().filter(s => serverMember(s, attacker.username));
+    if (serverId) {
+      creditServer = myServers.find(s => s.id === serverId);
+      if (!creditServer) return res.status(400).json({ error: "You're not a member of that server" });
+    } else if (myServers.length === 1) {
+      creditServer = myServers[0];
+    } else if (myServers.length > 1) {
+      return res.status(400).json({ error: "You're in more than one server — specify which one with serverId" });
+    }
+  }
+
   attacker.balance -= malware.cost;
   const infection = { id: crypto.randomUUID(), malwareId: malware.id, by: attacker.username, at: new Date().toISOString() };
+  if (creditServer) infection.serverId = creditServer.id;
   target.security.infections = target.security.infections || [];
   target.security.infections.push(infection);
 
@@ -1525,6 +1545,26 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   // respectively) for as long as the infection stays in the target's
   // infections list.
 
+  if (creditServer) {
+    const servers = readServers();
+    const liveServer = servers.find(s => s.id === creditServer.id);
+    liveServer.botnet = liveServer.botnet || [];
+    // A repeat capture (same victim, this server) tops up who gets credit
+    // and the rate rather than double-counting them in botnetSize/income.
+    const existing = liveServer.botnet.find(b => b.victimUserId === target.id);
+    const incomeRate = Math.round(BOTNET_BASE_INCOME_PER_HOUR * (1 + targetSecPct / 100));
+    if (existing) {
+      existing.capturedBy = attacker.username;
+      existing.capturedAt = new Date().toISOString();
+      existing.incomeRate = incomeRate;
+      existing.infectionId = infection.id;
+    } else {
+      liveServer.botnet.push({ victimUserId: target.id, victimUsername: target.username, capturedBy: attacker.username, capturedAt: new Date().toISOString(), incomeRate, infectionId: infection.id });
+    }
+    saveServers(servers);
+    resultNote += ' ' + target.username + ' conscripted into ' + liveServer.name + '\'s botnet (+$' + incomeRate + '/hr).';
+  }
+
   recordSecurityLog(users, target, { by: attacker.username, action: 'deploy:' + malware.id });
   recordActivity('hack-deploy', attacker.username, malware.name + ' vs ' + target.username);
   pushEvent(target.username, { type: 'refresh' });
@@ -1549,6 +1589,22 @@ app.post('/api/hack/avscan', requireAuth, (req, res) => {
   }
   user.security.infections = remaining;
   saveUsers(users);
+  // A removed infection that had conscripted this account into a server's
+  // botnet frees it from that botnet too — same "fight your way out" path
+  // as any other malware cleanup, no separate mechanic needed.
+  const freedFrom = removed.filter(inf => inf.serverId);
+  if (freedFrom.length) {
+    const servers = readServers();
+    let changed = false;
+    for (const inf of freedFrom) {
+      const server = servers.find(s => s.id === inf.serverId);
+      if (!server) continue;
+      const before = server.botnet.length;
+      server.botnet = server.botnet.filter(b => b.infectionId !== inf.id);
+      if (server.botnet.length !== before) changed = true;
+    }
+    if (changed) saveServers(servers);
+  }
   recordActivity('hack-avscan', user.username, removed.length + ' removed, ' + remaining.length + ' remain');
   res.json({ removed, remaining: remaining.map(inf => ({ ...inf, malware: malwareById(inf.malwareId) })) });
 });
@@ -1571,9 +1627,10 @@ app.get('/api/hack/dossier/:username', requireAuth, (req, res) => {
 /* time — distinct from the ad-hoc chat `groups` above. Membership is a       */
 /* four-rank ladder (intern < staff < admin < owner) and joining always goes  */
 /* through a pending invite the invitee has to accept, never an instant add.  */
-/* This section only covers the roster/ownership/payout-split scaffolding;    */
-/* botnet income and the multi-player breach mechanic build on top of it      */
-/* later and aren't here yet.                                                */
+/* Botnet income accrues lazily (like everything else in this codebase —     */
+/* there's no background tick loop) whenever a server is read: elapsed hours */
+/* since the last read times the botnet's earn rate gets folded into the     */
+/* treasury right there. The multi-player breach mechanic isn't here yet.    */
 
 const SERVER_SETUP_COST = 5000;
 const SERVER_ROLES = ['intern', 'staff', 'admin', 'owner'];
@@ -1581,6 +1638,11 @@ const SERVER_ROLE_RANK = { intern: 0, staff: 1, admin: 2, owner: 3 };
 // A starting suggestion only — the owner can repoint these at any time via
 // PUT /api/servers/:id/payouts, with no floor or enforced sum.
 const DEFAULT_PAYOUT_SPLITS = { intern: 10, staff: 25, admin: 15, owner: 50 };
+// Each botnet member earns this per hour, scaled up by how much security
+// they'd invested before getting captured (0-100% security -> 1x-2x) — a
+// harder victim to have cracked is worth more upkeep, same logic as steal's
+// payout scaling.
+const BOTNET_BASE_INCOME_PER_HOUR = 2;
 
 function readServers() {
   try { return JSON.parse(fs.readFileSync(SERVERS_FILE, 'utf8')); } catch (e) { return []; }
@@ -1605,15 +1667,38 @@ function loadServerOr404(req, res) {
   return server;
 }
 
+// Folds elapsed real time into the treasury based on the botnet's combined
+// earn rate, then resets the clock. Mutates `server` in place; the caller
+// is responsible for saving. Safe to call on every read — a server nobody's
+// looked at in days just gets a bigger deposit the next time someone does.
+function accrueServerIncome(server) {
+  if (!server.lastPayoutAt) { server.lastPayoutAt = new Date().toISOString(); return false; }
+  const elapsedHours = (Date.now() - new Date(server.lastPayoutAt).getTime()) / 3600000;
+  if (elapsedHours <= 0 || !server.botnet.length) { server.lastPayoutAt = new Date().toISOString(); return false; }
+  const hourlyRate = server.botnet.reduce((sum, b) => sum + (b.incomeRate || BOTNET_BASE_INCOME_PER_HOUR), 0);
+  server.treasury += Math.floor(hourlyRate * elapsedHours);
+  server.lastPayoutAt = new Date().toISOString();
+  return true;
+}
+// Applies accrual to every server in the given list that actually changed,
+// saving once at the end rather than once per server.
+function accrueAndSave(servers) {
+  let changed = false;
+  for (const server of servers) { if (accrueServerIncome(server)) changed = true; }
+  if (changed) saveServers(servers);
+  return servers;
+}
+
 app.get('/api/servers', requireAuth, (req, res) => {
-  const servers = readServers()
+  const all = accrueAndSave(readServers());
+  const servers = all
     .filter(s => serverMember(s, req.user.username))
-    .map(s => ({ id: s.id, name: s.name, ownerUsername: s.ownerUsername, memberCount: s.members.length, role: serverMember(s, req.user.username).role, treasury: s.treasury }));
+    .map(s => ({ id: s.id, name: s.name, ownerUsername: s.ownerUsername, memberCount: s.members.length, role: serverMember(s, req.user.username).role, treasury: s.treasury, botnetSize: s.botnet.length }));
   res.json({ servers });
 });
 
 app.get('/api/servers/all', requireAuth, requireSuperuser, (req, res) => {
-  res.json({ servers: readServers() });
+  res.json({ servers: accrueAndSave(readServers()) });
 });
 
 // Every pending invite addressed to the current user, across all servers —
@@ -1636,7 +1721,10 @@ app.get('/api/servers/:id', requireAuth, (req, res) => {
   if (!serverMember(server, req.user.username) && req.user.role !== 'superuser') {
     return res.status(403).json({ error: 'You are not a member of this server' });
   }
-  res.json({ server });
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  if (accrueServerIncome(liveServer)) saveServers(servers);
+  res.json({ server: liveServer });
 });
 
 app.post('/api/servers', requireAuth, (req, res) => {
@@ -1656,6 +1744,7 @@ app.post('/api/servers', requireAuth, (req, res) => {
     ownerUsername: founder.username,
     createdAt: new Date().toISOString(),
     treasury: 0,
+    lastPayoutAt: new Date().toISOString(),
     payoutSplits: { ...DEFAULT_PAYOUT_SPLITS },
     members: [{ userId: founder.id, username: founder.username, role: 'owner', invitedBy: null, joinedAt: new Date().toISOString() }],
     invites: [],
@@ -1811,6 +1900,59 @@ app.put('/api/servers/:id/payouts', requireAuth, (req, res) => {
   saveServers(servers);
   recordActivity('server-payouts-updated', req.user.username, server.name);
   res.json({ server: liveServer });
+});
+
+// Pays out the server's current treasury to its members according to
+// payoutSplits — admin+ can run it (the owner sets the rates, an admin can
+// run payroll). Splits aren't required to sum to 100 (the owner can set
+// whatever they want, per PUT .../payouts above), so the payout is scaled
+// down proportionally if honoring the splits in full would pay out more
+// than the treasury actually holds — nothing is ever created out of thin
+// air. A role with nobody in it just doesn't get paid; its share stays in
+// the treasury for a later payout.
+app.post('/api/servers/:id/payout', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const actorRank = serverRoleRank(server, req.user.username);
+  if (actorRank < SERVER_ROLE_RANK.admin) return res.status(403).json({ error: 'Only admins and the owner can run a payout' });
+
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  accrueServerIncome(liveServer);
+  if (liveServer.treasury <= 0) { saveServers(servers); return res.json({ server: liveServer, paidOut: 0, breakdown: [] }); }
+
+  const membersByRole = {};
+  for (const m of liveServer.members) (membersByRole[m.role] = membersByRole[m.role] || []).push(m.username);
+  const requested = {};
+  let totalRequested = 0;
+  for (const role of SERVER_ROLES) {
+    if (!membersByRole[role] || !membersByRole[role].length) continue;
+    const amount = liveServer.treasury * ((liveServer.payoutSplits[role] || 0) / 100);
+    if (amount <= 0) continue;
+    requested[role] = amount;
+    totalRequested += amount;
+  }
+  const scale = totalRequested > liveServer.treasury ? liveServer.treasury / totalRequested : 1;
+
+  const users = ensureEconomyFields(loadUsers());
+  const breakdown = [];
+  let totalPaid = 0;
+  for (const role of Object.keys(requested)) {
+    const perMember = Math.floor((requested[role] * scale) / membersByRole[role].length);
+    if (perMember <= 0) continue;
+    for (const username of membersByRole[role]) {
+      const user = users.find(u => u.username === username);
+      if (!user) continue;
+      user.balance += perMember;
+      totalPaid += perMember;
+      breakdown.push({ username, role, amount: perMember });
+    }
+  }
+  if (totalPaid > 0) saveUsers(users);
+  liveServer.treasury -= totalPaid;
+  saveServers(servers);
+  recordActivity('server-payout', req.user.username, liveServer.name + ' — $' + totalPaid + ' to ' + breakdown.length + ' member(s)');
+  res.json({ server: liveServer, paidOut: totalPaid, breakdown });
 });
 
 /* ---------------- real filesystem API ---------------- */

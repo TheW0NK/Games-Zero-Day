@@ -2502,7 +2502,7 @@
       list.innerHTML = data.servers.map(s =>
         '<div class="user-entry" style="cursor:pointer;" onclick="openServerDetail(\'' + escapeAttr(s.id) + '\')">' +
         '<div class="user-meta"><div class="user-name">' + escapeHtml(s.name) + '</div>' +
-        '<div class="user-role">' + SERVER_ROLE_LABEL[s.role] + ' · ' + s.memberCount + ' member' + (s.memberCount === 1 ? '' : 's') + ' · treasury ' + bankFormatMoney(s.treasury) + '</div></div>' +
+        '<div class="user-role">' + SERVER_ROLE_LABEL[s.role] + ' · ' + s.memberCount + ' member' + (s.memberCount === 1 ? '' : 's') + ' · ' + s.botnetSize + ' botnet · treasury ' + bankFormatMoney(s.treasury) + '</div></div>' +
         '</div>'
       ).join('');
     }catch(e){ document.getElementById('serversError').textContent = e.message; }
@@ -2624,6 +2624,16 @@
         (server.invites.length ? '<div class="user-list">' + invitePending + '</div>' : '');
     }
 
+    const hourlyRate = server.botnet.reduce((sum, b) => sum + (b.incomeRate || 0), 0);
+    const botnetRows = server.botnet.map(b =>
+      '<div class="user-entry"><div class="user-meta"><div class="user-name">' + escapeHtml(b.victimUsername) + '</div>' +
+      '<div class="user-role">+$' + b.incomeRate + '/hr · captured by ' + escapeHtml(b.capturedBy) + '</div></div></div>'
+    ).join('');
+    const botnetSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px;">Botnet — ' + server.botnet.length + ' member' + (server.botnet.length === 1 ? '' : 's') + (hourlyRate ? ' · +' + bankFormatMoney(hourlyRate) + '/hr' : '') + '</div>' +
+      (server.botnet.length
+        ? '<div class="user-list">' + botnetRows + '</div>'
+        : '<div class="ss-sub" style="margin:0 0 10px;">Nobody yet — breach a target and <span class="prompt">deploy botfly' + (server.members.length ? ' ' + escapeHtml(server.name) : '') + '</span> in Terminal to conscript them.</div>');
+
     let payoutSection = '';
     if(myRank >= SERVER_ROLE_RANK.owner){
       payoutSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px;">Payout splits</div>' +
@@ -2636,6 +2646,9 @@
       payoutSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px;">Payout splits</div>' +
         '<div class="ss-sub" style="margin:0 0 10px;">' + SERVER_ROLES_FOR_PAYOUT.map(r => SERVER_ROLE_LABEL[r] + ' ' + server.payoutSplits[r] + '%').join(' · ') + '</div>';
     }
+    if(myRank >= SERVER_ROLE_RANK.admin){
+      payoutSection += '<button class="mini-btn" onclick="serverRunPayout()">Run Payout (treasury: ' + bankFormatMoney(server.treasury) + ')</button>';
+    }
 
     const dangerBtn = (me && me.role === 'owner')
       ? '<button class="mini-btn danger" onclick="serverDisband()">Disband Server</button>'
@@ -2644,7 +2657,7 @@
     document.getElementById('serverDetailBody').innerHTML =
       '<div class="modal-title" style="font-size:12.5px; margin:0 0 8px;">Roster</div>' +
       '<div class="user-list">' + roster + '</div>' +
-      inviteSection + payoutSection +
+      inviteSection + botnetSection + payoutSection +
       '<div style="margin-top:14px;">' + dangerBtn + '</div>';
   }
   const SERVER_ROLES_FOR_PAYOUT = ['intern', 'staff', 'admin', 'owner'];
@@ -2699,6 +2712,15 @@
     if(!res.ok){ document.getElementById('serverDetailError').textContent = data.error; return; }
     renderServerDetail(data.server);
     showToast('Payouts saved');
+  }
+  async function serverRunPayout(){
+    const res = await fetch('/api/servers/' + encodeURIComponent(currentServerId) + '/payout', { method:'POST' });
+    const data = await res.json();
+    if(!res.ok){ document.getElementById('serverDetailError').textContent = data.error; return; }
+    renderServerDetail(data.server);
+    if(data.paidOut > 0) showToast('Paid out ' + bankFormatMoney(data.paidOut) + ' to ' + data.breakdown.length + ' member(s)');
+    else showToast('Nothing to pay out yet');
+    bankLoad();
   }
 
   async function toggleUserActive(id, reactivate){
@@ -5267,10 +5289,18 @@
       bankLoad();
     }catch(e){ printLine('steal: could not reach the server', 'err'); }
   }
-  async function termDeploy(malwareId){
-    if(!malwareId){ printLine('usage: deploy &lt;malware id&gt; — see <span class="prompt">malware list</span>', 'err'); return; }
+  async function termDeploy(malwareId, serverName){
+    if(!malwareId){ printLine('usage: deploy &lt;malware id&gt; [server name] — see <span class="prompt">malware list</span>. The server name only matters for botnet-category malware, and only if you\'re in more than one.', 'err'); return; }
     try{
-      const res = await fetch('/api/hack/deploy', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ malwareId }) });
+      const body = { malwareId };
+      if(serverName){
+        const sres = await fetch('/api/servers');
+        const sdata = await sres.json();
+        const match = sres.ok && sdata.servers.find(s => s.name.toLowerCase() === serverName.toLowerCase());
+        if(!match){ printLine('deploy: no server of yours named "' + serverName + '"', 'err'); return; }
+        body.serverId = match.id;
+      }
+      const res = await fetch('/api/hack/deploy', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       const data = await res.json();
       if(!res.ok){ printLine('deploy: ' + (data.error || 'failed'), 'err'); return; }
       printLine(escapeHtml(data.note));
@@ -5667,6 +5697,7 @@
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">secure &lt;port&gt; &lt;ratelimiter|sentinel|decoy&gt;</span> ($150) — install your own defense module<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span> — smaller, general-purpose edge<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;steal/drain payouts scale with the target\'s security % (shown in scan/secstatus) — 0% security means nothing to steal and no ransomware<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">deploy botfly [server name]</span> — also conscripts the target into that server\'s botnet for passive income (Servers app) on top of Botfly\'s usual backdoor<br>' +
           '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span>, <span class="prompt">leaderboard</span><br>' +
           '&nbsp;&nbsp;<b>Superuser</b> — <span class="prompt">setbalance &lt;user&gt; &lt;amount&gt;</span> — also available from Settings &gt; Users &gt; Edit'
         );
@@ -5790,7 +5821,7 @@
       case 'counter': termCounter(); break;
       case 'leaderboard': case 'top': termLeaderboard(); break;
       case 'steal': termSteal(); break;
-      case 'deploy': termDeploy(parts[1]); break;
+      case 'deploy': termDeploy(parts[1], parts.slice(2).join(' ')); break;
       case 'avscan': termAvscan(); break;
       case 'secstatus': termSecStatus(); break;
       case 'dossier': termDossier(parts[1]); break;

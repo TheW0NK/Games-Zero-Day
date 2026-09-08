@@ -1296,15 +1296,40 @@ app.get('/api/hack/deepscan/:username', requireAuth, (req, res) => {
   });
 });
 
-// Shared by both ways a breach can actually open: an instant backdoor
-// short-circuit, or cracking a puzzle. Opens the attacker's activeBreach
+// Shared by every way a breach can actually open: an instant backdoor
+// short-circuit, cracking a puzzle, or (see the servers section) spending a
+// cracked server-raid on a specific admin. Opens the attacker's activeBreach
 // window, opens the target's live under-attack window (unless the attacker
 // is cloaked on this target, in which case the whole thing stays invisible
 // to the target — the point of a rootkit), and pushes a real-time alert.
-function triggerBreach(users, attacker, target) {
-  activeBreaches.set(attacker.id, { target: target.username, expiresAt: Date.now() + 120000 });
+// `opts.viaServerBreach`, when set, tags the resulting activeBreach entry
+// with the server id it came from — steal/deploy check this to decide
+// whether the action counts toward that admin's compromise-flag threshold.
+//
+// Turnabout: if `target` (the account attacker just broke into) was, at
+// this exact moment, the one actively attacking `attacker`, this breach
+// doesn't just open a new front — it expels them. This is the "admin hacks
+// the hacker back" defense: no separate counter-attack action, an admin
+// just runs the same exploit/guess flow against whoever's attacking them,
+// and a successful breach both breaches the attacker's account AND kicks
+// them out of the admin's system in one move.
+function triggerBreach(users, attacker, target, opts) {
+  const breachEntry = { target: target.username, expiresAt: Date.now() + 120000 };
+  if (opts && opts.viaServerBreach) breachEntry.viaServerBreach = opts.viaServerBreach;
+  activeBreaches.set(attacker.id, breachEntry);
   recordSecurityLog(users, target, { by: attacker.username, action: 'exploit-success' });
   recordActivity('hack-exploit-success', attacker.username, 'vs ' + target.username);
+
+  let turnabout = false;
+  const reverseWindow = underAttackWindows.get(attacker.id);
+  if (reverseWindow && reverseWindow.by === target.username && reverseWindow.expiresAt >= Date.now()) {
+    activeBreaches.delete(target.id);
+    underAttackWindows.delete(attacker.id);
+    recordActivity('hack-turnabout', attacker.username, 'expelled ' + target.username);
+    pushEvent(target.username, { type: 'refresh' });
+    turnabout = true;
+  }
+
   const cloaked = hasInfectionMechanic(target.security, attacker.username, 'cloak');
   if (!cloaked) {
     const expiresAt = Date.now() + 45000;
@@ -1313,6 +1338,7 @@ function triggerBreach(users, attacker, target) {
   } else {
     pushEvent(target.username, { type: 'refresh' });
   }
+  return turnabout;
 }
 
 // A code-breaking mini-puzzle stands in for a flat dice roll: the module
@@ -1358,8 +1384,8 @@ app.post('/api/hack/exploit', requireAuth, (req, res) => {
   const hasBackdoor = hasInfectionMechanic(target.security, attacker.username, 'backdoor');
   if (hasBackdoor) {
     pendingPuzzles.delete(attacker.id);
-    triggerBreach(users, attacker, target);
-    return res.json({ viaBackdoor: true, breachExpiresIn: 120, balance: attacker.balance });
+    const turnabout = triggerBreach(users, attacker, target);
+    return res.json({ viaBackdoor: true, breachExpiresIn: 120, balance: attacker.balance, turnabout });
   }
 
   const module = target.security.modules[cleanPort];
@@ -1417,8 +1443,8 @@ app.post('/api/hack/guess', requireAuth, (req, res) => {
 
   if (exact === 4) {
     pendingPuzzles.delete(attacker.id);
-    triggerBreach(users, attacker, target);
-    return res.json({ cracked: true, exact, partial, breachExpiresIn: 120 });
+    const turnabout = triggerBreach(users, attacker, target);
+    return res.json({ cracked: true, exact, partial, breachExpiresIn: 120, turnabout });
   }
   if (puzzle.guesses.length >= puzzle.maxGuesses) {
     pendingPuzzles.delete(attacker.id);
@@ -1471,6 +1497,7 @@ function requireActiveBreach(req, res, users) {
 app.post('/api/hack/steal', requireAuth, (req, res) => {
   const users = ensureEconomyFields(loadUsers());
   const attacker = users.find(candidate => candidate.id === req.user.id);
+  const viaServerBreach = activeBreaches.get(attacker.id) && activeBreaches.get(attacker.id).viaServerBreach;
   const target = requireActiveBreach(req, res, users);
   if (!target) return;
   const pct = 0.05 + Math.random() * 0.1;
@@ -1483,6 +1510,7 @@ app.post('/api/hack/steal', requireAuth, (req, res) => {
   recordSecurityLog(users, target, { by: attacker.username, action: 'theft', amount });
   recordActivity('hack-steal', attacker.username, 'from ' + target.username + ' — $' + amount);
   pushEvent(target.username, { type: 'refresh' });
+  if (viaServerBreach) recordServerAdminAction(viaServerBreach, target.username, attacker.username, 'steal');
   res.json({ amount, balance: attacker.balance });
 });
 
@@ -1492,6 +1520,7 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   if (!malware) return res.status(400).json({ error: 'Unknown malware — check `malware list`' });
   const users = ensureEconomyFields(loadUsers());
   const attacker = users.find(candidate => candidate.id === req.user.id);
+  const viaServerBreach = activeBreaches.get(attacker.id) && activeBreaches.get(attacker.id).viaServerBreach;
   const target = requireActiveBreach(req, res, users);
   if (!target) return;
   const targetSecPct = securityPercent(target.security);
@@ -1568,6 +1597,7 @@ app.post('/api/hack/deploy', requireAuth, (req, res) => {
   recordSecurityLog(users, target, { by: attacker.username, action: 'deploy:' + malware.id });
   recordActivity('hack-deploy', attacker.username, malware.name + ' vs ' + target.username);
   pushEvent(target.username, { type: 'refresh' });
+  if (viaServerBreach) recordServerAdminAction(viaServerBreach, target.username, attacker.username, 'deploy:' + malware.id);
   res.json({ ok: true, note: resultNote, balance: attacker.balance });
 });
 
@@ -1667,6 +1697,15 @@ function loadServerOr404(req, res) {
   return server;
 }
 
+// adminFlags/adminActionCounts are owner-eyes-only (who's compromised and
+// how close anyone is to a flag isn't any other member's business, least
+// of all the flagged admin's) — every endpoint that hands back a server
+// object routes it through this first.
+function sanitizeServerForResponse(server, requesterUsername, requesterRole) {
+  if (requesterUsername === server.ownerUsername || requesterRole === 'superuser') return server;
+  return { ...server, adminFlags: undefined, adminActionCounts: undefined };
+}
+
 // Folds elapsed real time into the treasury based on the botnet's combined
 // earn rate, then resets the clock. Mutates `server` in place; the caller
 // is responsible for saving. Safe to call on every read — a server nobody's
@@ -1693,12 +1732,24 @@ app.get('/api/servers', requireAuth, (req, res) => {
   const all = accrueAndSave(readServers());
   const servers = all
     .filter(s => serverMember(s, req.user.username))
-    .map(s => ({ id: s.id, name: s.name, ownerUsername: s.ownerUsername, memberCount: s.members.length, role: serverMember(s, req.user.username).role, treasury: s.treasury, botnetSize: s.botnet.length }));
+    .map(s => ({ id: s.id, name: s.name, ownerUsername: s.ownerUsername, memberCount: s.members.length, role: serverMember(s, req.user.username).role, treasury: s.treasury, botnetSize: s.botnet.length, underRaid: !!(s.breach && !isBreachExpired(s.breach)) }));
   res.json({ servers });
 });
 
 app.get('/api/servers/all', requireAuth, requireSuperuser, (req, res) => {
   res.json({ servers: accrueAndSave(readServers()) });
+});
+
+// Every server, publicly-visible fields only — this is how a player finds
+// something to raid without already being a member of it. Same idea as
+// /api/hack/targets for individual players.
+app.get('/api/servers/directory', requireAuth, (req, res) => {
+  const servers = accrueAndSave(readServers()).map(s => ({
+    id: s.id, name: s.name, ownerUsername: s.ownerUsername, memberCount: s.members.length,
+    botnetSize: s.botnet.length, securityLevel: s.security.firewall + s.security.antivirus,
+    underRaid: !!(s.breach && !isBreachExpired(s.breach))
+  }));
+  res.json({ servers });
 });
 
 // Every pending invite addressed to the current user, across all servers —
@@ -1724,7 +1775,7 @@ app.get('/api/servers/:id', requireAuth, (req, res) => {
   const servers = readServers();
   const liveServer = servers.find(s => s.id === server.id);
   if (accrueServerIncome(liveServer)) saveServers(servers);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 app.post('/api/servers', requireAuth, (req, res) => {
@@ -1750,7 +1801,10 @@ app.post('/api/servers', requireAuth, (req, res) => {
     invites: [],
     botnet: [],
     security: { firewall: 1, antivirus: 1, modules: {} },
-    securityLog: []
+    securityLog: [],
+    breach: null,
+    adminFlags: [],
+    adminActionCounts: {}
   };
   const servers = readServers();
   servers.push(server);
@@ -1795,7 +1849,7 @@ app.post('/api/servers/:id/invites', requireAuth, (req, res) => {
   liveServer.invites.push({ id: crypto.randomUUID(), username: target.username, role: cleanRole, invitedBy: req.user.username, invitedAt: new Date().toISOString() });
   saveServers(servers);
   recordActivity('server-invite-sent', req.user.username, target.username + ' -> ' + server.name);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 // Same endpoint covers both directions: an admin/owner revoking an invite
@@ -1815,7 +1869,7 @@ app.delete('/api/servers/:id/invites/:inviteId', requireAuth, (req, res) => {
   const liveServer = servers.find(s => s.id === server.id);
   liveServer.invites = liveServer.invites.filter(i => i.id !== req.params.inviteId);
   saveServers(servers);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 app.post('/api/servers/:id/invites/:inviteId/accept', requireAuth, (req, res) => {
@@ -1832,7 +1886,7 @@ app.post('/api/servers/:id/invites/:inviteId/accept', requireAuth, (req, res) =>
   }
   saveServers(servers);
   recordActivity('server-invite-accepted', req.user.username, liveServer.name + ' as ' + invite.role);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 app.put('/api/servers/:id/members/:username/role', requireAuth, (req, res) => {
@@ -1856,7 +1910,7 @@ app.put('/api/servers/:id/members/:username/role', requireAuth, (req, res) => {
   serverMember(liveServer, req.params.username).role = role;
   saveServers(servers);
   recordActivity('server-role-changed', req.user.username, req.params.username + ' -> ' + role + ' in ' + server.name);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 app.delete('/api/servers/:id/members/:username', requireAuth, (req, res) => {
@@ -1880,7 +1934,7 @@ app.delete('/api/servers/:id/members/:username', requireAuth, (req, res) => {
   liveServer.members = liveServer.members.filter(m => m.username !== req.params.username);
   saveServers(servers);
   recordActivity('server-member-removed', req.user.username, req.params.username + ' from ' + server.name);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 app.put('/api/servers/:id/payouts', requireAuth, (req, res) => {
@@ -1899,7 +1953,7 @@ app.put('/api/servers/:id/payouts', requireAuth, (req, res) => {
   liveServer.payoutSplits = clean;
   saveServers(servers);
   recordActivity('server-payouts-updated', req.user.username, server.name);
-  res.json({ server: liveServer });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
 });
 
 // Pays out the server's current treasury to its members according to
@@ -1919,7 +1973,7 @@ app.post('/api/servers/:id/payout', requireAuth, (req, res) => {
   const servers = readServers();
   const liveServer = servers.find(s => s.id === server.id);
   accrueServerIncome(liveServer);
-  if (liveServer.treasury <= 0) { saveServers(servers); return res.json({ server: liveServer, paidOut: 0, breakdown: [] }); }
+  if (liveServer.treasury <= 0) { saveServers(servers); return res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role), paidOut: 0, breakdown: [] }); }
 
   const membersByRole = {};
   for (const m of liveServer.members) (membersByRole[m.role] = membersByRole[m.role] || []).push(m.username);
@@ -1952,7 +2006,258 @@ app.post('/api/servers/:id/payout', requireAuth, (req, res) => {
   liveServer.treasury -= totalPaid;
   saveServers(servers);
   recordActivity('server-payout', req.user.username, liveServer.name + ' — $' + totalPaid + ' to ' + breakdown.length + ' member(s)');
-  res.json({ server: liveServer, paidOut: totalPaid, breakdown });
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role), paidOut: totalPaid, breakdown });
+});
+
+// Paid from the treasury, not personal funds — the whole point is that a
+// well-funded team can afford to make their server a harder target. Same
+// 1-5 level cap and cost curve as personal firewall/antivirus, just paid
+// out of the shared pot by an admin instead of a player's own wallet.
+function serverSecurityUpgradeCost(level) { return level * 300; }
+app.post('/api/servers/:id/security/upgrade', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const actorRank = serverRoleRank(server, req.user.username);
+  if (actorRank < SERVER_ROLE_RANK.admin) return res.status(403).json({ error: 'Only admins and the owner can upgrade server security' });
+  const stat = String((req.body && req.body.stat) || '');
+  if (!['firewall', 'antivirus'].includes(stat)) return res.status(400).json({ error: 'stat must be "firewall" or "antivirus"' });
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  accrueServerIncome(liveServer);
+  if (liveServer.security[stat] >= 5) { saveServers(servers); return res.status(400).json({ error: stat + ' is already at maximum level' }); }
+  const cost = serverSecurityUpgradeCost(liveServer.security[stat]);
+  if (liveServer.treasury < cost) { saveServers(servers); return res.status(400).json({ error: `Not enough in the treasury — upgrading ${stat} costs $${cost}` }); }
+  liveServer.treasury -= cost;
+  liveServer.security[stat] += 1;
+  saveServers(servers);
+  recordActivity('server-security-upgrade', req.user.username, liveServer.name + ' ' + stat + ' -> ' + liveServer.security[stat]);
+  res.json({ server: sanitizeServerForResponse(liveServer, req.user.username, req.user.role) });
+});
+
+/* ---------------- server breaches (team hacking) ---------------- */
+/* Attacking a server is a team effort by design: all four stages          */
+/* (Firewall, User Manager, MFA, Password) are open from the start, each a */
+/* shared Mastermind-style puzzle (same scoreGuess as personal exploits)   */
+/* with ONE combined guess budget the whole raiding party draws from —     */
+/* that's the actual "divide and conquer": a solo player can only ever     */
+/* work one stage's guesses at a time, while a team camping different      */
+/* stages in parallel burns through all four at once. The raid stays open  */
+/* for hours (not the 90s personal-puzzle window) so it survives people    */
+/* logging off and coming back — a server can't be defended just by no one */
+/* being online, which is the point. MFA can't be solo-finished: the       */
+/* winning guess has to come from someone other than whoever made the      */
+/* previous attempt on that stage — one person narrows it down, someone    */
+/* else has to be the one who actually walks through the door.             */
+
+const SERVER_BREACH_STAGES = ['firewall', 'usermanager', 'mfa', 'password'];
+const SERVER_BREACH_STAGE_LABEL = { firewall: 'Firewall', usermanager: 'User Manager', mfa: 'MFA', password: 'Password' };
+const SERVER_BREACH_WINDOW_HOURS = 8;
+const SERVER_ADMIN_TARGET_COST = 100;
+// Actions here means steal/deploy against an admin reached via a cracked
+// server breach specifically — not just any personal hack of their
+// account. Silent until this many, matching "a flag will be put on that
+// admin once too many actions have been made" (not on the first one).
+const SERVER_ADMIN_FLAG_THRESHOLD = 3;
+const breachGuessCooldowns = new Map(); // key: attackerId:serverId:stage
+
+function newServerBreachStage(maxGuesses) {
+  return { status: 'open', code: newBreachCode(), maxGuesses, guesses: [] };
+}
+// The shared budget is fixed for the life of this raid at whatever the
+// server's security was the moment it started — an admin upgrading
+// mid-raid protects the *next* attempt, not this one, so upgrading can't
+// be used to keep moving the goalposts on people already mid-breach.
+function freshServerBreach(server, startedBy) {
+  const maxGuesses = 6 + server.security.firewall + server.security.antivirus;
+  const stages = {};
+  for (const stage of SERVER_BREACH_STAGES) stages[stage] = newServerBreachStage(maxGuesses);
+  const now = new Date();
+  return {
+    id: crypto.randomUUID(),
+    startedBy,
+    startedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + SERVER_BREACH_WINDOW_HOURS * 3600000).toISOString(),
+    status: 'active', // 'active' | 'cracked'
+    attackers: [startedBy],
+    stages,
+    crackedAt: null
+  };
+}
+function isBreachExpired(breach) {
+  return !breach || new Date(breach.expiresAt).getTime() < Date.now();
+}
+
+app.post('/api/servers/:id/breach/join', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (serverMember(server, req.user.username)) return res.status(400).json({ error: "You can't raid a server you're a member of" });
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  if (!liveServer.breach || isBreachExpired(liveServer.breach)) {
+    liveServer.breach = freshServerBreach(liveServer, req.user.username);
+    saveServers(servers);
+    recordActivity('server-breach-started', req.user.username, 'vs ' + liveServer.name);
+    return res.status(201).json({ breach: liveServer.breach, started: true });
+  }
+  if (!liveServer.breach.attackers.includes(req.user.username)) {
+    liveServer.breach.attackers.push(req.user.username);
+    saveServers(servers);
+    recordActivity('server-breach-joined', req.user.username, liveServer.name);
+  }
+  res.json({ breach: liveServer.breach, started: false });
+});
+
+app.get('/api/servers/:id/breach', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const active = server.breach && !isBreachExpired(server.breach);
+  const isAttacker = active && server.breach.attackers.includes(req.user.username);
+  const isDefender = !!serverMember(server, req.user.username);
+  if (!isAttacker && !isDefender && req.user.role !== 'superuser') return res.status(403).json({ error: "You're not involved with this server" });
+  res.json({ breach: active ? server.breach : null });
+});
+
+app.post('/api/servers/:id/breach/guess', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  const stage = String((req.body && req.body.stage) || '');
+  if (!SERVER_BREACH_STAGES.includes(stage)) return res.status(400).json({ error: 'stage must be one of: ' + SERVER_BREACH_STAGES.join(', ') });
+  const guess = Array.isArray(req.body && req.body.guess) ? req.body.guess.map(Number) : null;
+  if (!guess || guess.length !== 4 || guess.some(n => !Number.isInteger(n) || n < 1 || n > 6)) {
+    return res.status(400).json({ error: 'Guess must be 4 numbers, each 1-6' });
+  }
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  if (!liveServer.breach || isBreachExpired(liveServer.breach)) return res.status(403).json({ error: 'No active raid on this server — join one first' });
+  if (!liveServer.breach.attackers.includes(req.user.username)) return res.status(403).json({ error: "You haven't joined this raid yet" });
+  const stageState = liveServer.breach.stages[stage];
+  if (stageState.status !== 'open') return res.status(400).json({ error: 'That stage is already ' + stageState.status });
+  if (stageState.guesses.length >= stageState.maxGuesses) return res.status(400).json({ error: "This stage's guess budget is exhausted" });
+
+  const cooldownKey = req.user.id + ':' + server.id + ':' + stage;
+  const lastGuessAt = breachGuessCooldowns.get(cooldownKey) || 0;
+  if (Date.now() - lastGuessAt < 5000) return res.status(429).json({ error: 'Give it a moment before trying again' });
+  breachGuessCooldowns.set(cooldownKey, Date.now());
+
+  const { exact, partial } = scoreGuess(stageState.code, guess);
+  const previousGuesser = stageState.guesses.length ? stageState.guesses[stageState.guesses.length - 1].by : null;
+  stageState.guesses.push({ by: req.user.username, guess, exact, partial, at: new Date().toISOString() });
+
+  let cracked = false, needsSecondPerson = false;
+  if (exact === 4) {
+    if (stage === 'mfa' && (!previousGuesser || previousGuesser === req.user.username)) {
+      needsSecondPerson = true;
+    } else {
+      cracked = true;
+      stageState.status = 'cracked';
+      stageState.crackedBy = req.user.username;
+      stageState.crackedAt = new Date().toISOString();
+    }
+  }
+  if (!cracked && stageState.guesses.length >= stageState.maxGuesses) stageState.status = 'failed';
+
+  const allCracked = SERVER_BREACH_STAGES.every(s => liveServer.breach.stages[s].status === 'cracked');
+  if (allCracked && liveServer.breach.status !== 'cracked') {
+    liveServer.breach.status = 'cracked';
+    liveServer.breach.crackedAt = new Date().toISOString();
+    recordActivity('server-breach-cracked', req.user.username, liveServer.name);
+    for (const member of liveServer.members) pushEvent(member.username, { type: 'refresh' });
+  }
+  saveServers(servers);
+  res.json({
+    exact, partial, cracked, needsSecondPerson,
+    stageStatus: stageState.status, guessesLeft: stageState.maxGuesses - stageState.guesses.length,
+    breachStatus: liveServer.breach.status
+  });
+});
+
+// The explicit follow-up action once a raid is fully cracked — nothing
+// happens to any admin automatically. Spending this reuses the exact same
+// triggerBreach() a personal exploit success uses, so from here on
+// steal/deploy/counter/turnabout all just work normally against that
+// admin's own account; the only thing server-specific is that these
+// particular steal/deploy calls count toward that admin's compromise-flag
+// threshold below.
+app.post('/api/servers/:id/breach/target-admin', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (!server.breach || isBreachExpired(server.breach) || server.breach.status !== 'cracked') {
+    return res.status(403).json({ error: "This server's raid isn't fully cracked yet" });
+  }
+  if (!server.breach.attackers.includes(req.user.username)) return res.status(403).json({ error: "You weren't part of this raid" });
+  const targetMember = serverMember(server, String((req.body && req.body.username) || ''));
+  if (!targetMember || (targetMember.role !== 'admin' && targetMember.role !== 'owner')) {
+    return res.status(400).json({ error: 'That user is not an admin or the owner of this server' });
+  }
+  const users = ensureEconomyFields(loadUsers());
+  const attacker = users.find(u => u.id === req.user.id);
+  const target = users.find(u => u.username === targetMember.username && u.active !== false);
+  if (!target) return res.status(404).json({ error: 'That account is no longer active' });
+  if (attacker.balance < SERVER_ADMIN_TARGET_COST) return res.status(400).json({ error: `Not enough funds — this costs $${SERVER_ADMIN_TARGET_COST}` });
+  attacker.balance -= SERVER_ADMIN_TARGET_COST;
+  pendingPuzzles.delete(attacker.id);
+  const turnabout = triggerBreach(users, attacker, target, { viaServerBreach: server.id });
+  recordActivity('server-admin-targeted', attacker.username, targetMember.username + ' via ' + server.name);
+  res.json({ ok: true, balance: attacker.balance, breachExpiresIn: 120, turnabout });
+});
+
+// Called from steal/deploy when the attacker's active breach on that
+// target came from a cracked server raid. Counts silently until the
+// threshold, then opens (or tops up) a report in the owner's queue —
+// never touches the admin's account itself, same "someone should look at
+// this" framing as the age-safety reports.
+function recordServerAdminAction(serverId, adminUsername, byUsername, actionType) {
+  const servers = readServers();
+  const server = servers.find(s => s.id === serverId);
+  if (!server) return;
+  const member = serverMember(server, adminUsername);
+  if (!member || (member.role !== 'admin' && member.role !== 'owner')) return;
+  server.adminFlags = server.adminFlags || [];
+  server.adminActionCounts = server.adminActionCounts || {};
+  const now = new Date().toISOString();
+  let flag = server.adminFlags.find(f => f.adminUsername === adminUsername && f.status === 'open');
+  if (!flag) {
+    server.adminActionCounts[adminUsername] = (server.adminActionCounts[adminUsername] || 0) + 1;
+    if (server.adminActionCounts[adminUsername] >= SERVER_ADMIN_FLAG_THRESHOLD) {
+      flag = { id: crypto.randomUUID(), adminUsername, status: 'open', createdAt: now, updatedAt: now, actions: [] };
+      server.adminFlags.push(flag);
+    }
+  }
+  if (flag) {
+    flag.updatedAt = now;
+    flag.actions = [...(flag.actions || []), { type: actionType, by: byUsername, at: now }].slice(-8);
+  }
+  saveServers(servers);
+}
+
+app.get('/api/servers/:id/admin-flags', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (server.ownerUsername !== req.user.username) return res.status(403).json({ error: 'Only the owner can view admin-compromise reports' });
+  const flags = (server.adminFlags || []).filter(f => f.status === 'open').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  res.json({ flags });
+});
+
+app.post('/api/servers/:id/admin-flags/:flagId/resolve', requireAuth, (req, res) => {
+  const server = loadServerOr404(req, res);
+  if (!server) return;
+  if (server.ownerUsername !== req.user.username) return res.status(403).json({ error: 'Only the owner can resolve admin-compromise reports' });
+  const status = String((req.body && req.body.status) || '');
+  if (!['reviewed', 'dismissed'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const servers = readServers();
+  const liveServer = servers.find(s => s.id === server.id);
+  const flag = (liveServer.adminFlags || []).find(f => f.id === req.params.flagId);
+  if (!flag) return res.status(404).json({ error: 'Report not found' });
+  flag.status = status;
+  flag.resolvedBy = req.user.username;
+  flag.resolvedAt = new Date().toISOString();
+  // Restart the silent counter so the next batch of actions has to cross
+  // the threshold again rather than instantly reopening a flag.
+  liveServer.adminActionCounts = liveServer.adminActionCounts || {};
+  liveServer.adminActionCounts[flag.adminUsername] = 0;
+  saveServers(servers);
+  recordActivity('server-admin-flag-' + status, req.user.username, flag.adminUsername + ' in ' + server.name);
+  res.json({ ok: true });
 });
 
 /* ---------------- real filesystem API ---------------- */

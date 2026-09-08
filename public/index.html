@@ -2501,7 +2501,7 @@
       if(!data.servers.length){ list.innerHTML = '<div class="report-empty">Not on any servers yet.</div>'; return; }
       list.innerHTML = data.servers.map(s =>
         '<div class="user-entry" style="cursor:pointer;" onclick="openServerDetail(\'' + escapeAttr(s.id) + '\')">' +
-        '<div class="user-meta"><div class="user-name">' + escapeHtml(s.name) + '</div>' +
+        '<div class="user-meta"><div class="user-name">' + escapeHtml(s.name) + (s.underRaid ? ' <span class="admin-badge">UNDER RAID</span>' : '') + '</div>' +
         '<div class="user-role">' + SERVER_ROLE_LABEL[s.role] + ' · ' + s.memberCount + ' member' + (s.memberCount === 1 ? '' : 's') + ' · ' + s.botnetSize + ' botnet · treasury ' + bankFormatMoney(s.treasury) + '</div></div>' +
         '</div>'
       ).join('');
@@ -2634,6 +2634,36 @@
         ? '<div class="user-list">' + botnetRows + '</div>'
         : '<div class="ss-sub" style="margin:0 0 10px;">Nobody yet — breach a target and <span class="prompt">deploy botfly' + (server.members.length ? ' ' + escapeHtml(server.name) : '') + '</span> in Terminal to conscript them.</div>');
 
+    let raidSection = '';
+    if(server.breach && new Date(server.breach.expiresAt) > new Date() && server.breach.status !== 'cracked'){
+      const stageLines = SERVER_BREACH_STAGES_CLIENT.map(s => {
+        const st = server.breach.stages[s];
+        return SERVER_BREACH_STAGE_LABEL_CLIENT[s] + ': ' + st.status + ' (' + st.guesses.length + '/' + st.maxGuesses + ')';
+      }).join(' · ');
+      raidSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px; color:var(--danger);">Under raid</div>' +
+        '<div class="ss-sub" style="margin:0 0 10px;">Attackers: ' + server.breach.attackers.map(escapeHtml).join(', ') + '<br>' + stageLines + '</div>';
+    } else if(server.breach && server.breach.status === 'cracked' && new Date(server.breach.expiresAt) > new Date()){
+      raidSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px; color:var(--danger);">Breached</div>' +
+        '<div class="ss-sub" style="margin:0 0 10px;">All 4 stages are down. Attackers: ' + server.breach.attackers.map(escapeHtml).join(', ') + ' — they can now target admins directly.</div>';
+    }
+
+    let securitySection = '';
+    if(myRank >= SERVER_ROLE_RANK.admin){
+      const fw = server.security.firewall, av = server.security.antivirus;
+      const fwBtn = fw >= 5 ? '' : ' <button class="mini-btn" onclick="serverUpgradeSecurity(\'firewall\')">Upgrade ($' + (fw * 300) + ')</button>';
+      const avBtn = av >= 5 ? '' : ' <button class="mini-btn" onclick="serverUpgradeSecurity(\'antivirus\')">Upgrade ($' + (av * 300) + ')</button>';
+      securitySection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px;">Server security (paid from treasury)</div>' +
+        '<div class="ss-sub" style="margin:0 0 8px;">Sets the guess budget raiders get on each stage of a raid — higher is harder to crack.</div>' +
+        '<div class="user-entry"><div class="user-meta"><div class="user-name">Firewall lvl ' + fw + '</div></div><div class="user-actions">' + (fwBtn || '<span class="user-role">max</span>') + '</div></div>' +
+        '<div class="user-entry"><div class="user-meta"><div class="user-name">Antivirus lvl ' + av + '</div></div><div class="user-actions">' + (avBtn || '<span class="user-role">max</span>') + '</div></div>';
+    }
+
+    let adminFlagsSection = '';
+    if(me && me.role === 'owner'){
+      adminFlagsSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px;">Admin compromise reports</div>' +
+        '<div id="serverAdminFlagsList" class="report-list"><div class="report-empty">Loading…</div></div>';
+    }
+
     let payoutSection = '';
     if(myRank >= SERVER_ROLE_RANK.owner){
       payoutSection = '<div class="modal-title" style="font-size:12.5px; margin:14px 0 8px;">Payout splits</div>' +
@@ -2657,10 +2687,48 @@
     document.getElementById('serverDetailBody').innerHTML =
       '<div class="modal-title" style="font-size:12.5px; margin:0 0 8px;">Roster</div>' +
       '<div class="user-list">' + roster + '</div>' +
-      inviteSection + botnetSection + payoutSection +
+      raidSection + inviteSection + botnetSection + securitySection + payoutSection + adminFlagsSection +
       '<div style="margin-top:14px;">' + dangerBtn + '</div>';
+    if(me && me.role === 'owner') loadServerAdminFlags(server.id);
   }
   const SERVER_ROLES_FOR_PAYOUT = ['intern', 'staff', 'admin', 'owner'];
+
+  async function serverUpgradeSecurity(stat){
+    const res = await fetch('/api/servers/' + encodeURIComponent(currentServerId) + '/security/upgrade', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ stat }) });
+    const data = await res.json();
+    if(!res.ok){ document.getElementById('serverDetailError').textContent = data.error; return; }
+    renderServerDetail(data.server);
+    showToast(stat[0].toUpperCase() + stat.slice(1) + ' upgraded');
+  }
+
+  async function loadServerAdminFlags(serverId){
+    const list = document.getElementById('serverAdminFlagsList');
+    if(!list) return;
+    try{
+      const res = await fetch('/api/servers/' + encodeURIComponent(serverId) + '/admin-flags');
+      if(!res.ok) throw new Error('Could not load reports');
+      const data = await res.json();
+      if(!data.flags.length){ list.innerHTML = '<div class="report-empty">No open reports. Nice and quiet.</div>'; return; }
+      list.innerHTML = data.flags.map(flag => {
+        const actions = (flag.actions || []).slice(-3).map(a => '[' + escapeHtml(a.type) + '] by ' + escapeHtml(a.by)).join('\n');
+        return '<div class="report-entry">' +
+          '<div class="report-head"><div><div class="report-user">' + escapeHtml(flag.adminUsername) + '</div>' +
+          '<div class="report-reason">SERVER ACCESS ABUSED</div></div></div>' +
+          (actions ? '<div class="report-evidence">' + actions + '</div>' : '') +
+          '<div class="report-actions">' +
+          '<button class="mini-btn" onclick="resolveServerAdminFlag(\'' + escapeAttr(serverId) + '\', \'' + escapeAttr(flag.id) + '\', \'reviewed\')">Mark reviewed</button>' +
+          '<button class="mini-btn" onclick="resolveServerAdminFlag(\'' + escapeAttr(serverId) + '\', \'' + escapeAttr(flag.id) + '\', \'dismissed\')">Dismiss</button>' +
+          '</div></div>';
+      }).join('');
+    }catch(e){ list.innerHTML = '<div class="report-empty">' + escapeHtml(e.message) + '</div>'; }
+  }
+  async function resolveServerAdminFlag(serverId, flagId, status){
+    const res = await fetch('/api/servers/' + encodeURIComponent(serverId) + '/admin-flags/' + encodeURIComponent(flagId) + '/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status }) });
+    const data = await res.json();
+    if(!res.ok){ showToast(data.error); return; }
+    loadServerAdminFlags(serverId);
+    showToast(status === 'reviewed' ? 'Marked reviewed' : 'Dismissed');
+  }
 
   async function serverSendInvite(){
     const username = document.getElementById('srvInviteUsername').value.trim();
@@ -5318,6 +5386,108 @@
       else printLine('System is clean.');
     }catch(e){ printLine('avscan: could not reach the server', 'err'); }
   }
+
+  /* ---- server raids (team hacking) ---- */
+  const SERVER_BREACH_STAGES_CLIENT = ['firewall', 'usermanager', 'mfa', 'password'];
+  const SERVER_BREACH_STAGE_LABEL_CLIENT = { firewall: 'Firewall', usermanager: 'User Manager', mfa: 'MFA', password: 'Password' };
+  let currentRaidServer = null; // { id, name } — set by `raid <server name>`, used by the other raid subcommands
+
+  async function termRaid(args){
+    if(!args.length){
+      printLine('usage: <span class="prompt">raid &lt;server name&gt;</span> to join/start a raid (see <span class="prompt">raid list</span>) — then <span class="prompt">raid status</span>, <span class="prompt">raid guess &lt;stage&gt; n n n n</span>, <span class="prompt">raid target &lt;admin&gt;</span>', 'err');
+      return;
+    }
+    const sub = args[0].toLowerCase();
+    if(sub === 'list') return termRaidList();
+    if(sub === 'status') return termRaidStatus();
+    if(sub === 'guess') return termRaidGuess(args[1], args.slice(2));
+    if(sub === 'target') return termRaidTarget(args.slice(1).join(' '));
+    return termRaidJoin(args.join(' '));
+  }
+
+  async function termRaidList(){
+    try{
+      const res = await fetch('/api/servers/directory');
+      const data = await res.json();
+      if(!res.ok){ printLine('raid list: ' + (data.error || 'failed'), 'err'); return; }
+      if(!data.servers.length){ printLine('No servers exist yet.'); return; }
+      printLine(data.servers.map(s =>
+        escapeHtml(s.name) + ' — owner ' + escapeHtml(s.ownerUsername) + ', ' + s.memberCount + ' member(s), security lvl ' + s.securityLevel + (s.underRaid ? ' <span class="prompt">[under raid]</span>' : '')
+      ).join('<br>'));
+    }catch(e){ printLine('raid list: could not reach the server', 'err'); }
+  }
+
+  async function resolveRaidServerByName(name){
+    const res = await fetch('/api/servers/directory');
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data.servers.find(s => s.name.toLowerCase() === name.toLowerCase()) || null;
+  }
+
+  async function termRaidJoin(name){
+    if(!name){ printLine('usage: raid &lt;server name&gt;', 'err'); return; }
+    const match = await resolveRaidServerByName(name);
+    if(!match){ printLine('raid: no server named "' + name + '" — try <span class="prompt">raid list</span>', 'err'); return; }
+    try{
+      const res = await fetch('/api/servers/' + match.id + '/breach/join', { method:'POST' });
+      const data = await res.json();
+      if(!res.ok){ printLine('raid: ' + (data.error || 'failed'), 'err'); return; }
+      currentRaidServer = { id: match.id, name: match.name };
+      const stageSummary = SERVER_BREACH_STAGES_CLIENT.map(s => SERVER_BREACH_STAGE_LABEL_CLIENT[s] + ' (' + data.breach.stages[s].maxGuesses + ' guesses)').join(', ');
+      printLine((data.started ? 'Started a new raid on ' : 'Joined the raid on ') + escapeHtml(match.name) + '. Stages: ' + stageSummary + '. Try <span class="prompt">raid guess &lt;stage&gt; n n n n</span>.');
+    }catch(e){ printLine('raid: could not reach the server', 'err'); }
+  }
+
+  async function termRaidStatus(){
+    if(!currentRaidServer){ printLine('raid status: join a raid first with <span class="prompt">raid &lt;server name&gt;</span>', 'err'); return; }
+    try{
+      const res = await fetch('/api/servers/' + currentRaidServer.id + '/breach');
+      const data = await res.json();
+      if(!res.ok){ printLine('raid status: ' + (data.error || 'failed'), 'err'); return; }
+      if(!data.breach){ printLine('No active raid on ' + escapeHtml(currentRaidServer.name) + ' anymore.'); currentRaidServer = null; return; }
+      const lines = SERVER_BREACH_STAGES_CLIENT.map(s => {
+        const st = data.breach.stages[s];
+        return SERVER_BREACH_STAGE_LABEL_CLIENT[s] + ': ' + st.status + ' (' + st.guesses.length + '/' + st.maxGuesses + ' guesses used)';
+      });
+      printLine(escapeHtml(currentRaidServer.name) + ' — raid ' + data.breach.status + ', attackers: ' + data.breach.attackers.map(escapeHtml).join(', ') + '<br>&nbsp;&nbsp;' + lines.join('<br>&nbsp;&nbsp;'));
+    }catch(e){ printLine('raid status: could not reach the server', 'err'); }
+  }
+
+  async function termRaidGuess(stage, digits){
+    if(!currentRaidServer){ printLine('raid guess: join a raid first with <span class="prompt">raid &lt;server name&gt;</span>', 'err'); return; }
+    const guess = (digits || []).map(Number);
+    if(!stage || guess.length !== 4 || guess.some(n => !Number.isInteger(n) || n < 1 || n > 6)){
+      printLine('usage: raid guess &lt;firewall|usermanager|mfa|password&gt; n n n n (1-6 each)', 'err');
+      return;
+    }
+    try{
+      const res = await fetch('/api/servers/' + currentRaidServer.id + '/breach/guess', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ stage, guess }) });
+      const data = await res.json();
+      if(!res.ok){ printLine('raid guess: ' + (data.error || 'failed'), 'err'); return; }
+      if(data.needsSecondPerson){
+        printLine(data.exact + ' exact, ' + data.partial + ' partial — that\'s the code, but MFA needs someone else to submit it. Get a teammate to guess ' + guess.join(' ') + '.', 'err');
+        return;
+      }
+      if(data.cracked){
+        printLine(SERVER_BREACH_STAGE_LABEL_CLIENT[stage] + ' cracked!' + (data.breachStatus === 'cracked' ? ' All four stages are down — try <span class="prompt">raid target &lt;admin&gt;</span>.' : ''));
+        return;
+      }
+      if(data.stageStatus === 'failed'){ printLine(SERVER_BREACH_STAGE_LABEL_CLIENT[stage] + ' — out of guesses. That stage failed.', 'err'); return; }
+      printLine(data.exact + ' exact, ' + data.partial + ' partial (' + data.guessesLeft + ' guesses left on this stage)');
+    }catch(e){ printLine('raid guess: could not reach the server', 'err'); }
+  }
+
+  async function termRaidTarget(username){
+    if(!currentRaidServer){ printLine('raid target: join a raid first with <span class="prompt">raid &lt;server name&gt;</span>', 'err'); return; }
+    if(!username){ printLine('usage: raid target &lt;admin username&gt;', 'err'); return; }
+    try{
+      const res = await fetch('/api/servers/' + currentRaidServer.id + '/breach/target-admin', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+      const data = await res.json();
+      if(!res.ok){ printLine('raid target: ' + (data.error || 'failed'), 'err'); return; }
+      printLine('Breached ' + escapeHtml(username) + '\'s account through the exposed server access. You have ' + data.breachExpiresIn + 's — try <span class="prompt">steal</span> or <span class="prompt">deploy &lt;malware&gt;</span>.' + (data.turnabout ? ' (and you just got expelled from wherever they had broken into you)' : ''));
+      bankLoad();
+    }catch(e){ printLine('raid target: could not reach the server', 'err'); }
+  }
   async function termSecStatus(){
     try{
       const res = await fetch('/api/hack/status');
@@ -5698,6 +5868,10 @@
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">firewall upgrade</span>, <span class="prompt">antivirus upgrade</span> — smaller, general-purpose edge<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;steal/drain payouts scale with the target\'s security % (shown in scan/secstatus) — 0% security means nothing to steal and no ransomware<br>' +
           '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">deploy botfly [server name]</span> — also conscripts the target into that server\'s botnet for passive income (Servers app) on top of Botfly\'s usual backdoor<br>' +
+          '&nbsp;&nbsp;<b>Server raids</b> — <span class="prompt">raid list</span>, <span class="prompt">raid &lt;server name&gt;</span> to join/start<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;<span class="prompt">raid status</span>, <span class="prompt">raid guess &lt;firewall|usermanager|mfa|password&gt; n n n n</span> — one shared guess budget for the whole raiding party, split it up<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;MFA can\'t be solo-cracked — the winning guess has to come from someone other than whoever guessed last on that stage<br>' +
+          '&nbsp;&nbsp;&nbsp;&nbsp;once all 4 stages are down, <span class="prompt">raid target &lt;admin&gt;</span> ($100) breaches that admin\'s account through the exposed access — steal/deploy from there works as normal<br>' +
           '&nbsp;&nbsp;<b>Bank</b> — <span class="prompt">wallet</span>, <span class="prompt">transfer &lt;user&gt; &lt;amount&gt;</span>, <span class="prompt">payransom</span>, <span class="prompt">leaderboard</span><br>' +
           '&nbsp;&nbsp;<b>Superuser</b> — <span class="prompt">setbalance &lt;user&gt; &lt;amount&gt;</span> — also available from Settings &gt; Users &gt; Edit'
         );
@@ -5834,6 +6008,7 @@
         else termSecStatus();
         break;
       case 'malware': termMalwareList(); break;
+      case 'raid': termRaid(parts.slice(1)); break;
       case 'wallet': case 'balance': termWallet(); break;
       case 'transfer': termTransfer(parts[1], parts[2]); break;
       case 'payransom': termPayRansom(); break;
